@@ -1,0 +1,624 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NVR Vision Wall - V2</title>
+  <style>
+    :root {
+      --bg: #05070b;
+      --panel: #0d1118;
+      --panel2: #121821;
+      --panel3: #171f2b;
+      --line: rgba(255,255,255,.08);
+      --text: #f3f7fb;
+      --muted: #8c98aa;
+      --soft: #596579;
+      --green: #30d284;
+      --blue: #4ea1ff;
+      --orange: #ffba55;
+      --red: #ff6472;
+      --radius: 16px;
+      --shadow: 0 20px 70px rgba(0,0,0,.45);
+    }* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(78,161,255,.15), transparent 34%),
+    radial-gradient(circle at 80% 10%, rgba(48,210,132,.10), transparent 30%),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+button, input, select { font: inherit; }
+button { cursor: pointer; border: 0; }
+
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 68px 1fr 92px;
+  padding: 12px;
+  gap: 12px;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  background: rgba(13,17,24,.82);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 10px 12px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  color: #061018;
+  font-weight: 950;
+  letter-spacing: -.06em;
+}
+
+.brand-title { font-weight: 950; letter-spacing: -.04em; line-height: 1; }
+.brand-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+.center-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.segmented {
+  display: flex;
+  gap: 5px;
+  background: rgba(255,255,255,.055);
+  border: 1px solid var(--line);
+  padding: 5px;
+  border-radius: 14px;
+}
+
+.segmented button,
+.icon-btn,
+.btn {
+  color: var(--text);
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 11px;
+  padding: 9px 11px;
+  font-weight: 850;
+  font-size: 13px;
+}
+
+.segmented button.active {
+  background: var(--green);
+  color: #03100a;
+  border-color: transparent;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  color: #041018;
+  border-color: transparent;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.pill.green { background: rgba(48,210,132,.14); color: #7df0b6; }
+.pill.blue { background: rgba(78,161,255,.14); color: #9ccfff; }
+.pill.orange { background: rgba(255,186,85,.14); color: #ffd592; }
+.pill.red { background: rgba(255,100,114,.14); color: #ffa0a9; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+.vision-wall {
+  display: grid;
+  grid-template-columns: 76px 1fr 320px;
+  gap: 12px;
+  min-height: 0;
+}
+
+.rail {
+  background: rgba(13,17,24,.72);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+}
+
+.rail-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.055);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-weight: 950;
+  transition: .15s ease;
+}
+
+.rail-btn.active,
+.rail-btn:hover {
+  background: rgba(78,161,255,.15);
+  color: var(--text);
+  border-color: rgba(78,161,255,.35);
+}
+
+.camera-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cam {
+  position: relative;
+  min-height: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.09);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.07), rgba(255,255,255,.01)),
+    #0c121b;
+  box-shadow: 0 16px 45px rgba(0,0,0,.33);
+}
+
+.cam.large {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.cam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 46px 46px;
+  opacity: .32;
+}
+
+.fake-scene {
+  position: absolute;
+  inset: 58px 28px 58px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.07);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(78,161,255,.22), transparent 22%),
+    radial-gradient(circle at 70% 60%, rgba(48,210,132,.13), transparent 28%),
+    linear-gradient(150deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
+  display: grid;
+  place-items: center;
+  color: rgba(255,255,255,.23);
+  font-size: clamp(28px, 4vw, 68px);
+  font-weight: 900;
+}
+
+.cam.large .fake-scene { font-size: 92px; }
+
+.cam-top,
+.cam-bottom {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 2;
+}
+
+.cam-top { top: 14px; }
+.cam-bottom { bottom: 14px; }
+
+.cam-title { font-weight: 950; letter-spacing: -.03em; }
+.cam-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+.cam-actions { display: flex; gap: 7px; }
+.cam-action {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(0,0,0,.32);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,.12);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.side-panel {
+  min-height: 0;
+  background: rgba(13,17,24,.72);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+}
+
+.panel-head {
+  padding: 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-title { font-weight: 950; letter-spacing: -.03em; }
+.panel-sub { margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+.health-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mini-card {
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 14px;
+  padding: 11px;
+}
+
+.mini-label { color: var(--muted); font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
+.mini-value { margin-top: 6px; font-size: 21px; font-weight: 950; letter-spacing: -.05em; }
+
+.camera-list {
+  overflow: auto;
+  padding: 12px;
+}
+
+.camera-row {
+  padding: 12px;
+  border-radius: 15px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.06);
+  margin-bottom: 9px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.camera-name { font-weight: 900; }
+.camera-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+.bottom-dock {
+  background: rgba(13,17,24,.82);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  grid-template-columns: 1.2fr 2fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+  min-height: 0;
+}
+
+.dock-card {
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 14px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.dock-title {
+  font-weight: 950;
+  font-size: 13px;
+  margin-bottom: 9px;
+}
+
+.event-inline {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline {
+  height: 16px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,.08);
+  position: relative;
+  margin-top: 13px;
+}
+
+.timeline .rec {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--green);
+  border-radius: 999px;
+}
+
+.timeline .motion {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--orange);
+  border-radius: 999px;
+}
+
+.timeline .marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 14px #fff;
+}
+
+.storage-bar {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.storage-fill {
+  width: 67%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--orange));
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.65);
+  display: none;
+  place-items: center;
+  z-index: 50;
+  padding: 18px;
+}
+
+.modal-backdrop.open { display: grid; }
+.modal {
+  width: min(760px, 100%);
+  background: #0d1118;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.modal-body { padding: 16px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: grid; gap: 7px; }
+.field.full { grid-column: 1 / -1; }
+label { color: var(--muted); font-size: 12px; font-weight: 850; }
+input, select {
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 11px;
+  outline: none;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 1150px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100vh; grid-template-rows: auto auto auto; }
+  .vision-wall { grid-template-columns: 1fr; }
+  .rail { flex-direction: row; overflow-x: auto; }
+  .side-panel { max-height: none; }
+  .bottom-dock { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 780px) {
+  .topbar { grid-template-columns: 1fr; }
+  .brand { border-right: 0; padding-right: 0; }
+  .center-controls, .top-actions { justify-content: stretch; overflow-x: auto; }
+  .camera-grid { grid-template-columns: 1fr; grid-template-rows: none; }
+  .cam, .cam.large { grid-column: auto; grid-row: auto; min-height: 280px; }
+  .form-grid { grid-template-columns: 1fr; }
+}
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">NV</div>
+        <div>
+          <div class="brand-title">Vision Wall</div>
+          <div class="brand-sub">Software NVR · ONVIF / RTSP</div>
+        </div>
+      </div><div class="center-controls">
+    <div class="segmented">
+      <button>1</button>
+      <button class="active">6</button>
+      <button>9</button>
+      <button>16</button>
+      <button>Wall</button>
+    </div>
+    <span class="pill green"><span class="dot"></span>6 Recording</span>
+    <span class="pill orange"><span class="dot"></span>2 Events</span>
+  </div>
+
+  <div class="top-actions">
+    <button class="btn">Playback</button>
+    <button class="btn">Events</button>
+    <button class="btn btn-primary" onclick="openModal()">+ Camera</button>
+  </div>
+</header>
+
+<main class="vision-wall">
+  <aside class="rail">
+    <button class="rail-btn active">▦</button>
+    <button class="rail-btn">▶</button>
+    <button class="rail-btn">●</button>
+    <button class="rail-btn">◉</button>
+    <button class="rail-btn">▣</button>
+    <button class="rail-btn">⚙</button>
+  </aside>
+
+  <section class="camera-grid">
+    <article class="cam large">
+      <div class="cam-top">
+        <div>
+          <div class="cam-title">Front Lot Main</div>
+          <div class="cam-sub">192.168.1.42 · Main stream · 1080p</div>
+        </div>
+        <span class="pill green"><span class="dot"></span>REC</span>
+      </div>
+      <div class="fake-scene">CAM 01</div>
+      <div class="cam-bottom">
+        <span class="pill blue">18 FPS · H.264</span>
+        <div class="cam-actions"><button class="cam-action">⛶</button><button class="cam-action">◉</button><button class="cam-action">PTZ</button></div>
+      </div>
+    </article>
+
+    <article class="cam">
+      <div class="cam-top">
+        <div><div class="cam-title">Loading Dock</div><div class="cam-sub">4MP · H.265</div></div>
+        <span class="pill orange">Motion</span>
+      </div>
+      <div class="fake-scene">02</div>
+      <div class="cam-bottom"><span class="pill blue">Live</span><div class="cam-actions"><button class="cam-action">⛶</button><button class="cam-action">◉</button></div></div>
+    </article>
+
+    <article class="cam">
+      <div class="cam-top">
+        <div><div class="cam-title">Rear Yard PTZ</div><div class="cam-sub">PTZ · 1440p</div></div>
+        <span class="pill green">REC</span>
+      </div>
+      <div class="fake-scene">03</div>
+      <div class="cam-bottom"><span class="pill blue">Profile T</span><div class="cam-actions"><button class="cam-action">⛶</button><button class="cam-action">PTZ</button></div></div>
+    </article>
+  </section>
+
+  <aside class="side-panel">
+    <div class="panel-head">
+      <div class="panel-title">Camera Stack</div>
+      <div class="panel-sub">Quick status and device health</div>
+    </div>
+
+    <div class="health-strip">
+      <div class="mini-card"><div class="mini-label">Online</div><div class="mini-value">6/8</div></div>
+      <div class="mini-card"><div class="mini-label">Storage</div><div class="mini-value">67%</div></div>
+      <div class="mini-card"><div class="mini-label">Events</div><div class="mini-value">24</div></div>
+      <div class="mini-card"><div class="mini-label">Load</div><div class="mini-value">42%</div></div>
+    </div>
+
+    <div class="camera-list">
+      <div class="camera-row"><div><div class="camera-name">Front Lot Main</div><div class="camera-meta">Recording · 1080p · Profile T</div></div><span class="pill green">On</span></div>
+      <div class="camera-row"><div><div class="camera-name">Loading Dock</div><div class="camera-meta">Motion event · H.265</div></div><span class="pill orange">Motion</span></div>
+      <div class="camera-row"><div><div class="camera-name">Rear Yard PTZ</div><div class="camera-meta">PTZ available · Recording</div></div><span class="pill green">On</span></div>
+      <div class="camera-row"><div><div class="camera-name">Office Hall</div><div class="camera-meta">Connection lost</div></div><span class="pill red">Off</span></div>
+      <div class="camera-row"><div><div class="camera-name">Gate Entry</div><div class="camera-meta">Recording · 1080p</div></div><span class="pill green">On</span></div>
+      <div class="camera-row"><div><div class="camera-name">Warehouse Aisle</div><div class="camera-meta">Substream preview</div></div><span class="pill blue">Live</span></div>
+    </div>
+  </aside>
+</main>
+
+<footer class="bottom-dock">
+  <div class="dock-card">
+    <div class="dock-title">Latest Event</div>
+    <div class="event-inline"><span class="pill orange">Motion</span> Loading Dock detected movement at 2:41 PM</div>
+  </div>
+
+  <div class="dock-card">
+    <div class="dock-title">Playback Timeline</div>
+    <div class="event-inline">Front Lot Main · Today · Scrub recording and motion events</div>
+    <div class="timeline">
+      <div class="rec" style="left:4%; width:28%"></div>
+      <div class="motion" style="left:38%; width:8%"></div>
+      <div class="rec" style="left:51%; width:35%"></div>
+      <div class="marker" style="left:42%"></div>
+    </div>
+  </div>
+
+  <div class="dock-card">
+    <div class="dock-title">Storage Health</div>
+    <div class="event-inline">4.2 TB used of 6.3 TB · 18 day estimate</div>
+    <div class="storage-bar"><div class="storage-fill"></div></div>
+  </div>
+</footer>
+
+  </div>  <div class="modal-backdrop" id="addCameraModal">
+    <div class="modal">
+      <div class="panel-head">
+        <div class="panel-title">Add ONVIF Camera</div>
+        <div class="panel-sub">Connect by discovery or manual IP / RTSP override</div>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field"><label>Camera Name</label><input placeholder="Front Lot Main"></div>
+          <div class="field"><label>IP Address</label><input placeholder="192.168.1.42"></div>
+          <div class="field"><label>ONVIF Port</label><input placeholder="80 / 8899 / 8000"></div>
+          <div class="field"><label>Stream</label><select><option>Main Stream</option><option>Sub Stream</option><option>Auto</option></select></div>
+          <div class="field"><label>Username</label><input placeholder="admin"></div>
+          <div class="field"><label>Password</label><input type="password" placeholder="••••••••"></div>
+          <div class="field full"><label>RTSP Override</label><input placeholder="rtsp://user:pass@camera-ip:554/stream1"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn">Scan Network</button>
+        <button class="btn">Test</button>
+        <button class="btn btn-primary" onclick="closeModal()">Save Camera</button>
+      </div>
+    </div>
+  </div>  <script>
+    const modal = document.getElementById('addCameraModal');
+    function openModal(){ modal.classList.add('open'); }
+    function closeModal(){ modal.classList.remove('open'); }
+    modal.addEventListener('click', e => { if(e.target === modal) closeModal(); });
+  </script></body>
+</html>
