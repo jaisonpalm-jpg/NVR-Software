@@ -1,0 +1,366 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vision NVR — Modern VMS UI</title>
+  <style>
+    :root {
+      --bg: #05070c;
+      --panel: #0d121b;
+      --panel-2: #111925;
+      --panel-3: #172233;
+      --line: rgba(255,255,255,.08);
+      --line-strong: rgba(255,255,255,.14);
+      --text: #f5f8fc;
+      --muted: #95a2b5;
+      --faint: #5e6b7e;
+      --green: #29d17d;
+      --blue: #4c9dff;
+      --orange: #ffb84d;
+      --red: #ff6170;
+      --purple: #9b7cff;
+      --shadow: 0 24px 90px rgba(0,0,0,.46);
+      --radius: 20px;
+      --radius-sm: 14px;
+    }* { box-sizing: border-box; }
+body {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 15% -10%, rgba(76,157,255,.20), transparent 34%),
+    radial-gradient(circle at 88% 2%, rgba(41,209,125,.13), transparent 32%),
+    linear-gradient(180deg, #060911, #03050a 72%);
+}
+
+button, input, select { font: inherit; }
+button { border: 0; cursor: pointer; }
+
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 70px 1fr;
+  padding: 12px;
+  gap: 12px;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: 280px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(13,18,27,.84);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-mark {
+  width: 44px; height: 44px; border-radius: 15px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  color: #041018; font-weight: 950; letter-spacing: -.08em;
+  box-shadow: 0 15px 40px rgba(41,209,125,.18);
+}
+.brand-title { font-weight: 950; letter-spacing: -.045em; line-height: 1; }
+.brand-sub { color: var(--muted); font-size: 12px; margin-top: 5px; }
+
+.nav {
+  justify-self: center;
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  background: rgba(255,255,255,.055);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.nav-btn {
+  color: var(--muted);
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  transition: .16s ease;
+}
+.nav-btn.active, .nav-btn:hover { background: rgba(255,255,255,.09); color: var(--text); }
+.nav-btn.active { background: var(--green); color: #03100a; }
+
+.top-actions { display: flex; align-items: center; gap: 8px; }
+.btn, .icon-btn {
+  color: var(--text);
+  background: rgba(255,255,255,.075);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 13px;
+  padding: 10px 13px;
+  font-weight: 900;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.btn-primary { background: linear-gradient(135deg, var(--green), var(--blue)); color: #041018; border-color: transparent; }
+
+.shell { min-height: 0; position: relative; }
+.page { display: none; height: 100%; min-height: 0; }
+.page.active { display: grid; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 950; white-space: nowrap;
+  letter-spacing: .01em;
+}
+.pill.green { color: #7bf0b3; background: rgba(41,209,125,.14); }
+.pill.blue { color: #9ccaff; background: rgba(76,157,255,.14); }
+.pill.orange { color: #ffd290; background: rgba(255,184,77,.14); }
+.pill.red { color: #ff9ca6; background: rgba(255,97,112,.14); }
+.pill.gray { color: var(--muted); background: rgba(255,255,255,.08); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* LIVE WALL */
+.live-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: 1fr 104px;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.site-rail, .dock-card, .panel {
+  background: rgba(13,18,27,.76);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.site-rail { min-height: 0; display: grid; grid-template-rows: auto 1fr; }
+.section-head { padding: 15px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.section-title { font-weight: 950; letter-spacing: -.03em; }
+.section-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+.site-list { padding: 12px; overflow: auto; }
+.site-card {
+  padding: 12px; border-radius: 15px; margin-bottom: 9px;
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.065);
+}
+.site-card.active { background: rgba(76,157,255,.13); border-color: rgba(76,157,255,.35); }
+.site-title { font-weight: 900; }
+.site-meta { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.35; }
+
+.grid-wrap {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+}
+.grid-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px;
+  background: rgba(13,18,27,.65); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.grid-title { font-weight: 950; font-size: 18px; letter-spacing: -.04em; }
+.grid-tools { display: flex; align-items: center; gap: 8px; }
+
+.layout-select { display: flex; gap: 5px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,.055); border: 1px solid var(--line); }
+.layout-select button { padding: 8px 10px; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 950; font-size: 12px; }
+.layout-select button.active { background: var(--green); color: #041018; }
+
+.camera-wall {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.feed {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(76,157,255,.17), transparent 24%),
+    linear-gradient(145deg, #0b111a, #151e2b);
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+.feed.hero { grid-column: span 2; grid-row: span 2; }
+.feed.motion { border-color: rgba(255,184,77,.55); box-shadow: 0 0 0 1px rgba(255,184,77,.12), 0 22px 60px rgba(0,0,0,.4); }
+.feed.offline { filter: grayscale(.75); opacity: .72; }
+.feed::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: linear-gradient(rgba(255,255,255,.034) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.034) 1px, transparent 1px);
+  background-size: 44px 44px; opacity: .32;
+}
+.scene {
+  position: absolute; inset: 54px 24px 54px;
+  border-radius: 16px; border: 1px solid rgba(255,255,255,.07);
+  display: grid; place-items: center;
+  color: rgba(255,255,255,.22); font-weight: 950; letter-spacing: -.05em;
+  font-size: clamp(24px, 3vw, 62px);
+  background: linear-gradient(135deg, rgba(255,255,255,.065), rgba(255,255,255,.012));
+}
+.feed.hero .scene { font-size: 76px; }
+.feed-top, .feed-bottom { position: absolute; left: 12px; right: 12px; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.feed-top { top: 12px; }
+.feed-bottom { bottom: 12px; }
+.feed-name { font-weight: 950; letter-spacing: -.03em; }
+.feed-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.feed-actions { display: flex; gap: 6px; }
+.feed-action { width: 32px; height: 32px; border-radius: 11px; display: grid; place-items: center; color: var(--text); background: rgba(0,0,0,.32); border: 1px solid rgba(255,255,255,.12); font-weight: 900; font-size: 12px; }
+
+.bottom-dock { grid-column: 1 / -1; display: grid; grid-template-columns: 1.1fr 2fr 1fr; gap: 12px; min-height: 0; }
+.dock-card { padding: 14px; }
+.dock-title { font-weight: 950; letter-spacing: -.03em; margin-bottom: 8px; }
+.dock-line { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline { height: 16px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; position: relative; margin-top: 14px; }
+.timeline .rec, .timeline .motion, .timeline .gap { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.timeline .rec { background: var(--green); }
+.timeline .motion { background: var(--orange); }
+.timeline .gap { background: rgba(255,255,255,.12); }
+.timeline .marker { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #fff; box-shadow: 0 0 14px #fff; }
+.storage-bar { height: 12px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 14px; }
+.storage-fill { width: 67%; height: 100%; background: linear-gradient(90deg, var(--green), var(--orange)); }
+
+/* GENERAL PAGES */
+.page-grid { display: grid; grid-template-columns: 320px 1fr; gap: 12px; height: 100%; min-height: 0; }
+.panel { min-height: 0; }
+.panel-body { padding: 14px; overflow: auto; }
+.list-row {
+  padding: 13px; border-radius: 15px; margin-bottom: 9px;
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.065);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.row-title { font-weight: 920; }
+.row-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+.playback-view { display: grid; grid-template-rows: 1fr 150px; gap: 12px; height: 100%; min-height: 0; }
+.playback-video { border-radius: var(--radius); border: 1px solid var(--line); background: linear-gradient(135deg, #0b111a, #182337); display: grid; place-items: center; color: rgba(255,255,255,.2); font-weight: 950; font-size: 64px; position: relative; overflow: hidden; }
+.playback-video::before { content:""; position:absolute; inset:0; background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 46px 46px; opacity:.35; }
+.playback-video span { position: relative; z-index: 1; }
+.control-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.setup-grid, .settings-grid, .storage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.065); border-radius: 18px; padding: 15px; }
+.card-title { font-weight: 950; letter-spacing: -.03em; }
+.card-sub { color: var(--muted); font-size: 13px; margin-top: 6px; line-height: 1.45; }
+.field { display: grid; gap: 7px; margin-top: 12px; }
+label { color: var(--muted); font-size: 12px; font-weight: 850; }
+input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 13px; padding: 11px 12px; outline: none; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.68); display: none; place-items: center; z-index: 50; padding: 18px; }
+.modal-backdrop.open { display: grid; }
+.modal { width: min(760px,100%); background: #0d121b; border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 9px; padding: 14px; border-top: 1px solid var(--line); }
+
+@media (max-width: 1160px) {
+  body { overflow: auto; height: auto; }
+  .app { height: auto; min-height: 100vh; }
+  .topbar { grid-template-columns: 1fr; }
+  .nav { justify-self: stretch; }
+  .top-actions { justify-content: flex-end; }
+  .live-layout { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+  .camera-wall { min-height: 760px; }
+  .bottom-dock { grid-template-columns: 1fr; }
+  .page-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .app { padding: 8px; gap: 8px; }
+  .camera-wall { grid-template-columns: 1fr; grid-template-rows: none; min-height: auto; }
+  .feed, .feed.hero { grid-column: auto; grid-row: auto; height: 280px; }
+  .setup-grid, .settings-grid, .storage-grid { grid-template-columns: 1fr; }
+  .brand-sub { display: none; }
+}
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">NV</div>
+        <div>
+          <div class="brand-title">Vision NVR</div>
+          <div class="brand-sub">Modern ONVIF / RTSP video management</div>
+        </div>
+      </div><nav class="nav">
+    <button class="nav-btn active" data-page="live">Live Wall</button>
+    <button class="nav-btn" data-page="playback">Playback</button>
+    <button class="nav-btn" data-page="cameras">Camera Setup</button>
+    <button class="nav-btn" data-page="storage">Storage</button>
+    <button class="nav-btn" data-page="settings">Settings</button>
+  </nav>
+
+  <div class="top-actions">
+    <button class="btn">Alerts</button>
+    <button class="btn btn-primary" onclick="openModal()">+ Add Camera</button>
+  </div>
+</header>
+
+<section class="shell">
+  <main class="page active" id="live">
+    <div class="live-layout">
+      <aside class="site-rail">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Sites</div>
+            <div class="section-sub">Groups & cameras</div>
+          </div>
+        </div>
+        <div class="site-list">
+          <div class="site-card active"><div class="site-title">Main Warehouse</div><div class="site-meta">8 cameras · 6 recording · 2 events</div></div>
+          <div class="site-card"><div class="site-title">Truck Yard</div><div class="site-meta">5 cameras · 5 online</div></div>
+          <div class="site-card"><div class="site-title">Office</div><div class="site-meta">4 cameras · 1 offline</div></div>
+          <div class="site-card"><div class="site-title">Dock Doors</div><div class="site-meta">6 cameras · motion priority</div></div>
+        </div>
+      </aside>
+
+      <section class="grid-wrap">
+        <div class="grid-toolbar">
+          <div>
+            <div class="grid-title">Main Warehouse Live Wall</div>
+            <div class="section-sub">Camera-first monitoring with event-aware priority</div>
+          </div>
+          <div class="grid-tools">
+            <span class="pill green"><span class="dot"></span>6 Recording</span>
+            <span class="pill orange"><span class="dot"></span>Motion</span>
+            <div class="layout-select"><button>1</button><button class="active">8</button><button>12</button><button>16</button></div>
+          </div>
+        </div>
+
+        <div class="camera-wall">
+          <article class="feed hero">
+            <div class="feed-top"><div><div class="feed-name">Front Lot Main</div><div class="feed-meta">192.168.1.42 · 1080p · Main stream</div></div><span class="pill green"><span class="dot"></span>REC</span></div>
+            <div class="scene">CAM 01</div>
+            <div class="feed-bottom"><span class="pill blue">18 FPS · H.264</span><div class="feed-actions"><button class="feed-action">⛶</button><button class="feed-action">◉</button><button class="feed-action">PTZ</button></div></div>
+          </article>
+          <article class="feed motion"><div class="feed-top"><div><div class="feed-name">Loading Dock</div><div class="feed-meta">4MP · H.265</div></div><span class="pill orange">Motion</span></div><div class="scene">02</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button><button class="feed-action">◉</button></div></div></article>
+          <article class="feed"><div class="feed-top"><div><div class="feed-name">Rear Yard PTZ</div><div class="feed-meta">PTZ · 1440p</div></div><span class="pill green">REC</span></div><div class="scene">03</div><div class="feed-bottom"><span class="pill blue">Profile T</span><div class="feed-actions"><button class="feed-action">⛶</button><button class="feed-action">PTZ</button></div></div></article>
+          <article class="feed"><div class="feed-top"><div><div class="feed-name">Gate Entry</div><div class="feed-meta">1080p · H.264</div></div><span class="pill green">REC</span></div><div class="scene">04</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
+          <article class="feed offline"><div class="feed-top"><div><div class="feed-name">Office Hall</div><div class="feed-meta">Connection lost</div></div><span class="pill red">Offline</span></div><div class="scene">OFF</div><div class="feed-bottom"><span class="pill red">No Signal</span><div class="feed-actions"><button class="feed-action">↻</button></div></div></article>
+          <article class="feed"><div class="feed-top"><div><div class="feed-name">Warehouse Aisle</div><div class="feed-meta">Substream preview</div></div><span class="pill green">REC</span></div><div class="scene">06</div><div class="feed-bottom"><span class="pill blue">720p</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
+          <article class="feed"><div class="feed-top"><div><div class="feed-name">Side Door</div><div class="feed-meta">Profile S</div></div><span class="pill green">REC</span></div><div class="scene">07</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
+          <article class="feed"><div class="feed-top"><div><div class="feed-name">Parking Rear</div><div class="feed-meta">Profile T</div></div><span class="pill green">REC</span></div><div class="scene">08</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
+        </div>
+      </section>
+
+      <footer class="bottom-dock">
+        <div class="dock-card"><div class="dock-title">Latest Event</div><div class="dock-line"><span class="pill orange">Motion</span> Loading Dock detected movement at 2:41 PM</div></div>
+        <div class="dock-card"><div class="dock-title">Mini Timeline</div><div class="dock-line">Front Lot Main · Today · Recording and motion markers</div><div class="timeline"><div class="rec" style="left:4%;width:28%"></div><div class="motion" style="left:38%;width:8%"></div><div class="rec" style="left:51%;width:35%"></div><div class="marker" style="left:42%"></div></div></div>
+        <div class="dock-card"><div class="dock-title">Storage</div><div class="dock-line">4.2 TB used · 18 day retention</div><div class="storage-bar"><div class="storage-fill"></div></div></div>
+      </footer>
+    </div>
+  </main>
+
+  <main class="page" id="playback">
+    <div class="page-grid">
+      <aside class="panel"><div class="section-head"><div><div class="section-title">Playback Cameras</div><div class="section-sub">Select source</div></div></div><div class="panel-body"><div class="list-row"><div><div class="row-title">Front Lot Main</div><div class="row-sub">Continuous recording</div></div><span class="pill green">Ready</span></div><div class="list-row"><div><div class="row-title">Loading Dock</div><div class="row-sub">Motion events</div></div><span class="pill orange">24 clips</span></div><div class="list-row"><div><div class="row-title">Rear Yard PTZ</div><div class="row-sub">Continuous recording</div></div><span class="pill green">Ready</span></div></div></aside>
+      <section class="playback-view"><div class="playback-video"><span>PLAYBACK</span></div><div class="dock-card"><div class="dock-title">May 3, 2026 Timeline</div><div class="dock-line">Scrub recordings, jump to motion markers, export clips.</div><div class="timeline"><div class="rec" style="left:2%;width:36%"></div><div class="motion" style="left:44%;width:9%"></div><div class="rec" style="left:58%;width:34%"></div><div class="marker" style="left:47%"></div></div><div class="control-row"><button class="btn">◀ 10s</button><button class="btn btn-primary">▶ Play</button><button class="btn">Pause</button><button class="btn">1x</button><button class="btn">Snapshot</butt
