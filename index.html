@@ -407,7 +407,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
         <div class="section-head">
           <div>
             <div class="section-title">ONVIF</div>
-            <div class="section-sub">Discover probes the LAN. Test does not run checks.</div>
+            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Test does not run checks.</div>
           </div>
         </div>
         <div class="panel-body">
@@ -417,6 +417,23 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
               <div class="card-sub">Search this network for ONVIF devices. Results stay off the camera list until you add one yourself.</div>
               <div class="control-row"><button class="btn btn-primary" type="button" id="discover-btn">Discover ONVIF devices</button></div>
               <div id="discover-result" aria-live="polite"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Authenticate</div>
+              <div class="card-sub">Choose a discovered device and send its login to the server. The password is cleared on submit and is not shown again.</div>
+              <form id="auth-form" method="post" action="/api/onvif/authenticate" autocomplete="off">
+                <p class="card-sub" id="auth-target">Select a discovered device.</p>
+                <div class="field">
+                  <label for="auth-username">Username</label>
+                  <input id="auth-username" name="username" maxlength="128" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="field">
+                  <label for="auth-password">Password</label>
+                  <input id="auth-password" name="password" type="password" maxlength="256" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="control-row"><button class="btn btn-primary" type="submit" id="auth-btn" disabled>Authenticate</button></div>
+                <p class="card-sub" id="auth-result" role="status"></p>
+              </form>
             </div>
             <div class="card">
               <div class="card-title">Test</div>
@@ -484,7 +501,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
     <div class="section-head">
       <div>
         <div class="section-title" id="add-camera-title">Add Camera</div>
-        <div class="section-sub">Name, site, and group. Device login is not part of this unit.</div>
+        <div class="section-sub">Name, site, and group. Device login is the Authenticate step, not this form.</div>
       </div>
     </div>
     <form id="add-camera-form">
@@ -519,6 +536,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   const cameraCount = document.getElementById('camera-count');
   const addForm = document.getElementById('add-camera-form');
   const addError = document.getElementById('add-camera-error');
+  let selectedDevice = null;
 
   function showPage(pageId) {
     navBtns.forEach((btn) => {
@@ -567,7 +585,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       title.textContent = 'No cameras saved';
       const sub = document.createElement('div');
       sub.className = 'row-sub';
-      sub.textContent = 'Add a name, site, and group. Discovery does not add devices.';
+      sub.textContent = 'Add a name, site, and group, or authenticate a discovered device. Discovery alone does not add devices.';
       text.append(title, sub);
       row.append(text);
       cameraList.append(row);
@@ -585,7 +603,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       sub.textContent = [camera.site, camera.group].filter(Boolean).join(' · ') || 'No site';
       text.append(title, sub);
       const pill = document.createElement('span');
-      pill.className = 'pill gray';
+      pill.className = camera.status === 'authenticated' ? 'pill green' : 'pill gray';
       pill.textContent = camera.status || 'unknown';
       row.append(text, pill);
       cameraList.append(row);
@@ -711,8 +729,49 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       sub.textContent = deviceDetail(device);
       text.append(title, sub);
       row.append(text);
+      const endpoint = deviceEndpoint(device);
+      if (endpoint) {
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.className = 'btn auth-pick';
+        pick.textContent = 'Select';
+        pick.dataset.host = endpoint.host;
+        pick.dataset.port = String(endpoint.port);
+        pick.dataset.path = endpoint.path;
+        pick.dataset.scheme = endpoint.scheme;
+        pick.dataset.label = deviceLabel(device);
+        row.append(pick);
+      }
       target.append(row);
     });
+  }
+
+  function deviceEndpoint(device) {
+    const xaddrs = device && device.probe && Array.isArray(device.probe.xaddrs) ? device.probe.xaddrs : [];
+    const xaddr = typeof xaddrs[0] === 'string' ? xaddrs[0] : '';
+    if (xaddr) {
+      try {
+        const url = new URL(xaddr);
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          const port = url.port ? Number(url.port) : (url.protocol === 'https:' ? 443 : 80);
+          const path = url.pathname && url.pathname.startsWith('/') ? url.pathname : '/onvif/device_service';
+          if (url.hostname) {
+            return {
+              host: url.hostname,
+              port,
+              path,
+              scheme: url.protocol === 'https:' ? 'https' : 'http'
+            };
+          }
+        }
+      } catch {
+        /* fall through to the address fields */
+      }
+    }
+    const host = device && typeof device.address === 'string' ? device.address.trim() : '';
+    const port = device && Number.isInteger(device.port) ? device.port : null;
+    if (!host || !port) return null;
+    return { host, port, path: '/onvif/device_service', scheme: 'http' };
   }
 
   function note(text) {
@@ -739,6 +798,85 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
     if (vendor) parts.push(vendor);
     return parts.join(' · ') || 'ONVIF device';
   }
+
+  document.getElementById('discover-result').addEventListener('click', (event) => {
+    const button = event.target.closest('button.auth-pick');
+    if (!button) return;
+    const port = Number(button.dataset.port);
+    const host = button.dataset.host || '';
+    if (!host || !Number.isInteger(port)) return;
+    selectedDevice = {
+      host,
+      port,
+      path: button.dataset.path || '/onvif/device_service',
+      scheme: button.dataset.scheme === 'https' ? 'https' : 'http',
+      name: button.dataset.label || host
+    };
+    document.getElementById('auth-username').value = '';
+    document.getElementById('auth-password').value = '';
+    document.getElementById('auth-target').textContent = (selectedDevice.name || host) + ' · ' + host + ':' + port;
+    document.getElementById('auth-result').textContent = '';
+    document.getElementById('auth-btn').disabled = false;
+    document.getElementById('auth-username').focus();
+  });
+
+  document.getElementById('auth-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const result = document.getElementById('auth-result');
+    const usernameEl = document.getElementById('auth-username');
+    const passwordEl = document.getElementById('auth-password');
+    const button = document.getElementById('auth-btn');
+    const username = usernameEl.value;
+    const password = passwordEl.value;
+    usernameEl.value = '';
+    passwordEl.value = '';
+    if (!selectedDevice || !username || !password) {
+      result.textContent = 'Select a device and enter a username and password.';
+      return;
+    }
+    const payload = {
+      host: selectedDevice.host,
+      port: selectedDevice.port,
+      path: selectedDevice.path,
+      scheme: selectedDevice.scheme,
+      name: selectedDevice.name,
+      username,
+      password
+    };
+    button.disabled = true;
+    result.textContent = 'Checking the device…';
+    try {
+      const response = await fetch('/api/onvif/authenticate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        body: JSON.stringify(payload)
+      });
+      payload.username = '';
+      payload.password = '';
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (data && data.authenticated === true) {
+        result.textContent = 'Authenticated. The login stays on the server.';
+        loadCameras();
+      } else if (data && data.error === 'unreachable') {
+        result.textContent = 'The device did not answer. The login was not stored.';
+      } else {
+        result.textContent = 'Authentication failed. The login was not stored.';
+      }
+    } catch {
+      result.textContent = 'Authentication unavailable.';
+    } finally {
+      payload.username = '';
+      payload.password = '';
+      button.disabled = !selectedDevice;
+    }
+  });
 
   document.getElementById('test-btn').addEventListener('click', () => {
     runStub('/api/onvif/test', document.getElementById('test-result'), (data) => {

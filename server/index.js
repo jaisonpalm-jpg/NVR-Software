@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCameraStore } from './persistence.js';
 import { discoverOnvif, parseDiscoverRequest, toDiscoverResponse } from './onvif-discover.js';
+import { authContract, parseAuthenticateRequest, runAuthenticate } from './onvif-auth.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultDbPath = process.env.VMS_DB_PATH || path.join(root, 'data', 'vms.sqlite');
@@ -29,11 +30,12 @@ export function startServer({
   port = Number(process.env.PORT || 8787),
   host = '127.0.0.1',
   dbPath = defaultDbPath,
-  discoverOptions = {}
+  discoverOptions = {},
+  authOptions = {}
 } = {}) {
   const store = createCameraStore(dbPath);
   const server = http.createServer((req, res) => {
-    dispatch(req, res, store, discoverOptions).catch((err) => {
+    dispatch(req, res, store, discoverOptions, authOptions).catch((err) => {
       if (res.headersSent) return;
       const status = err.code === 'VALIDATION' ? 400 : err.code === 'LIMIT' ? 413 : 500;
       const error = err.code === 'VALIDATION'
@@ -60,7 +62,7 @@ export function startServer({
   });
 }
 
-async function dispatch(req, res, store, discoverOptions) {
+async function dispatch(req, res, store, discoverOptions, authOptions) {
   const pathname = requestPath(req);
 
   if (req.method === 'GET' && pathname === '/api/cameras') {
@@ -112,6 +114,30 @@ async function dispatch(req, res, store, discoverOptions) {
       targets: request.targets
     });
     sendJson(res, 200, toDiscoverResponse(devices));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/onvif/authenticate') {
+    const body = await readBody(req);
+    const request = parseAuthenticateRequest(body);
+    const outcome = await runAuthenticate(request, authOptions);
+    if (!outcome.ok) {
+      const error = outcome.error === 'auth_failed' ? 'auth_failed' : 'unreachable';
+      sendJson(res, error === 'auth_failed' ? 401 : 502, {
+        ok: false,
+        contract: authContract(),
+        authenticated: false,
+        error
+      });
+      return;
+    }
+    const camera = await store.saveAuthenticated(request);
+    sendJson(res, 200, {
+      ok: true,
+      contract: authContract(),
+      authenticated: true,
+      cameraId: camera.id
+    });
     return;
   }
 

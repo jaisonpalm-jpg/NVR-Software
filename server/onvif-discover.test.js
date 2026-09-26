@@ -313,14 +313,18 @@ test('HTTP discover returns the probe result and does not save cameras', async (
   }
 });
 
-test('the cameras page calls discover and has no credential fields', () => {
+test('the cameras page calls discover and posts credentials only through authenticate', () => {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(html, /id="discover-btn"/);
   assert.match(html, /Discover ONVIF devices/);
   assert.match(html, /\/api\/onvif\/discover/);
   assert.match(html, /Nothing was added to the camera list/);
-  assert.equal(/type="password"/i.test(html), false);
-  assert.equal(/name="password"/i.test(html), false);
-  assert.equal(/name="username"/i.test(html), false);
-  assert.equal(html.includes(secretKey), false);
+  assert.match(html, /body:\s*'\{\}'/);
+  assert.match(html, /id="auth-form"/);
+  assert.match(html, /method="post"/);
+  assert.match(html, /action="\/api\/onvif\/authenticate"/);
+  assert.match(html, /type="password"/i);
+  assert.equal(/localStorage|sessionStorage|document\.cookie/.test(html), false);
+  assert.equal(html.includes('?password'), false);
+  assert.equal(html.includes(sentinel), false);
 });
