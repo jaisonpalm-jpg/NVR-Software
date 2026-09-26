@@ -10,6 +10,14 @@ const secretKey = ['pass', 'word'].join('');
 const userKey = ['user', 'name'].join('');
 const sentinel = 'sentinel-secret-value';
 
+function assertForbiddenKeys(value) {
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value)) {
+    assert.equal(/pass|secret|credential|token|username|userinfo/i.test(key), false, key);
+    assertForbiddenKeys(child);
+  }
+}
+
 function tempDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vms-u0-'));
   return path.join(dir, 'vms.sqlite');
@@ -75,7 +83,7 @@ test('userinfo in a camera name is removed before save', async () => {
   }
 });
 
-test('stub routes return empty contracts and do not echo secrets', async () => {
+test('camera routes stay sanitized and discover does not echo secrets', async () => {
   const started = await startServer({ port: 0, dbPath: tempDb() });
   const base = `http://127.0.0.1:${started.port}`;
   try {
@@ -83,24 +91,32 @@ test('stub routes return empty contracts and do not echo secrets', async () => {
     assert.equal(list.status, 200);
     assert.equal(await list.text(), '[]');
 
+    const beforeDiscover = await fetch(`${base}/api/cameras`);
+    assert.equal(await beforeDiscover.text(), '[]');
+
     const discover = await fetch(`${base}/api/onvif/discover`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        host: '192.168.1.10',
+        timeoutMs: 100,
+        host: '192.0.2.10',
         [userKey]: 'operator',
         [secretKey]: sentinel
       })
     });
     const discoverText = await discover.text();
+    const discoverBody = JSON.parse(discoverText);
     assert.equal(discover.status, 200);
-    assert.deepEqual(JSON.parse(discoverText), {
-      ok: true,
-      contract: 'onvif.discover.v0',
-      implemented: false,
-      devices: []
-    });
+    assert.equal(discoverBody.ok, true);
+    assert.equal(discoverBody.contract, 'onvif.discover.v0');
+    assert.equal(discoverBody.implemented, true);
+    assert.ok(Array.isArray(discoverBody.devices));
     assert.equal(discoverText.includes(sentinel), false);
+    assert.equal(discoverText.includes('operator'), false);
+    assertForbiddenKeys(discoverBody);
+
+    const afterDiscover = await fetch(`${base}/api/cameras`);
+    assert.equal(await afterDiscover.text(), '[]');
 
     const createdRes = await fetch(`${base}/api/cameras`, {
       method: 'POST',

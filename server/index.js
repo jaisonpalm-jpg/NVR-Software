@@ -3,17 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCameraStore } from './persistence.js';
+import { discoverOnvif, parseDiscoverRequest, toDiscoverResponse } from './onvif-discover.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultDbPath = process.env.VMS_DB_PATH || path.join(root, 'data', 'vms.sqlite');
 const MAX_BODY = 64 * 1024;
-
-const DISCOVER_STUB = Object.freeze({
-  ok: true,
-  contract: 'onvif.discover.v0',
-  implemented: false,
-  devices: []
-});
 
 const TEST_STUB = Object.freeze({
   ok: true,
@@ -34,11 +28,12 @@ const TEST_STUB = Object.freeze({
 export function startServer({
   port = Number(process.env.PORT || 8787),
   host = '127.0.0.1',
-  dbPath = defaultDbPath
+  dbPath = defaultDbPath,
+  discoverOptions = {}
 } = {}) {
   const store = createCameraStore(dbPath);
   const server = http.createServer((req, res) => {
-    dispatch(req, res, store).catch((err) => {
+    dispatch(req, res, store, discoverOptions).catch((err) => {
       if (res.headersSent) return;
       const status = err.code === 'VALIDATION' ? 400 : err.code === 'LIMIT' ? 413 : 500;
       const error = err.code === 'VALIDATION'
@@ -65,7 +60,7 @@ export function startServer({
   });
 }
 
-async function dispatch(req, res, store) {
+async function dispatch(req, res, store, discoverOptions) {
   const pathname = requestPath(req);
 
   if (req.method === 'GET' && pathname === '/api/cameras') {
@@ -109,8 +104,14 @@ async function dispatch(req, res, store) {
   }
 
   if (req.method === 'POST' && pathname === '/api/onvif/discover') {
-    await readBody(req);
-    sendJson(res, 200, DISCOVER_STUB);
+    const body = await readBody(req);
+    const request = parseDiscoverRequest(body);
+    const devices = await discoverOnvif({
+      createSocket: discoverOptions.createSocket,
+      timeoutMs: request.timeoutMs ?? discoverOptions.timeoutMs,
+      targets: request.targets
+    });
+    sendJson(res, 200, toDiscoverResponse(devices));
     return;
   }
 

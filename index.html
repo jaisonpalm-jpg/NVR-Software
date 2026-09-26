@@ -37,6 +37,7 @@ body {
 
 button, input, select { font: inherit; }
 button { border: 0; cursor: pointer; }
+button:disabled { opacity: .6; cursor: default; }
 
 .app {
   height: 100vh;
@@ -405,17 +406,17 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       <section class="panel">
         <div class="section-head">
           <div>
-            <div class="section-title">ONVIF stubs</div>
-            <div class="section-sub">Discover and test do not contact devices</div>
+            <div class="section-title">ONVIF</div>
+            <div class="section-sub">Discover probes the LAN. Test does not run checks.</div>
           </div>
         </div>
         <div class="panel-body">
           <div class="setup-grid">
             <div class="card">
               <div class="card-title">Discover</div>
-              <div class="card-sub">Returns an empty device list. Nothing is added automatically.</div>
-              <div class="control-row"><button class="btn btn-primary" type="button" id="discover-btn">Run discover stub</button></div>
-              <div class="card-sub" id="discover-result" aria-live="polite"></div>
+              <div class="card-sub">Search this network for ONVIF devices. Results stay off the camera list until you add one yourself.</div>
+              <div class="control-row"><button class="btn btn-primary" type="button" id="discover-btn">Discover ONVIF devices</button></div>
+              <div id="discover-result" aria-live="polite"></div>
             </div>
             <div class="card">
               <div class="card-title">Test</div>
@@ -667,11 +668,77 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   }
 
   document.getElementById('discover-btn').addEventListener('click', () => {
-    runStub('/api/onvif/discover', document.getElementById('discover-result'), (data) => {
-      const count = Array.isArray(data.devices) ? data.devices.length : 0;
-      return count + ' devices · discovery is not implemented';
-    });
+    runDiscover();
   });
+
+  async function runDiscover() {
+    const target = document.getElementById('discover-result');
+    const button = document.getElementById('discover-btn');
+    button.disabled = true;
+    target.replaceChildren();
+    target.append(note('Probing the local network…'));
+    try {
+      const response = await fetch('/api/onvif/discover', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}'
+      });
+      if (!response.ok) throw new Error('discover failed');
+      renderDiscover(target, await response.json());
+    } catch {
+      target.replaceChildren();
+      target.append(note('Discover unavailable.'));
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function renderDiscover(target, data) {
+    const devices = Array.isArray(data && data.devices) ? data.devices : [];
+    const summary = devices.length
+      ? devices.length + ' device' + (devices.length === 1 ? '' : 's') + ' found. Nothing was added to the camera list.'
+      : 'No ONVIF devices found. Nothing was added to the camera list.';
+    target.replaceChildren(note(summary));
+    devices.forEach((device) => {
+      const row = document.createElement('div');
+      row.className = 'list-row';
+      const text = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'row-title';
+      title.textContent = deviceLabel(device);
+      const sub = document.createElement('div');
+      sub.className = 'row-sub';
+      sub.textContent = deviceDetail(device);
+      text.append(title, sub);
+      row.append(text);
+      target.append(row);
+    });
+  }
+
+  function note(text) {
+    const line = document.createElement('p');
+    line.className = 'card-sub';
+    line.textContent = text;
+    return line;
+  }
+
+  function deviceLabel(device) {
+    if (device && typeof device.name === 'string' && device.name.trim()) return device.name.trim();
+    if (device && typeof device.address === 'string' && device.address.trim()) return device.address.trim();
+    return 'ONVIF device';
+  }
+
+  function deviceDetail(device) {
+    const parts = [];
+    const address = device && typeof device.address === 'string' ? device.address.trim() : '';
+    const port = device && Number.isInteger(device.port) ? String(device.port) : '';
+    if (address) parts.push(port ? address + ':' + port : address);
+    const vendor = [device && device.manufacturer, device && device.model]
+      .filter((value) => typeof value === 'string' && value.trim())
+      .join(' ');
+    if (vendor) parts.push(vendor);
+    return parts.join(' · ') || 'ONVIF device';
+  }
 
   document.getElementById('test-btn').addEventListener('click', () => {
     runStub('/api/onvif/test', document.getElementById('test-result'), (data) => {
