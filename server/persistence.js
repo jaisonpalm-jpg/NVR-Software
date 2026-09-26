@@ -11,17 +11,19 @@ import { runGetStreamUri } from './onvif-stream.js';
  * Camera persistence port.
  *
  * SQLite is the local adapter. A later PostgreSQL adapter can implement the
- * same async methods (list, get, create, saveAuthenticated, interrogate,
- * saveConfigured, runTest, confirmReview, markSuccess, openLive, close)
- * without changing camera routes.
+ * same async methods (list, get, create, updateInventory, remove,
+ * saveAuthenticated, interrogate, saveConfigured, runTest, confirmReview,
+ * markSuccess, openLive, close) without changing camera routes.
  *
  * Public rows are an allowlist: id, name, site, group, status, createdAt,
  * plus optional non-secret configure fields manufacturer, model, profileId,
  * and profileLabel, plus optional lastTestAt, lastTestSummary, and
  * reviewedAt. Device login is stored only in camera_credentials. list, get,
- * create, interrogate, saveConfigured, runTest, confirmReview, and
- * markSuccess never return that table. openLive may return a server-side
- * media source for the live proxy; callers must not serialize that object.
+ * create, updateInventory, remove, interrogate, saveConfigured, runTest,
+ * confirmReview, and markSuccess never return that table. updateInventory
+ * changes name, site, and group only. remove deletes the camera and its
+ * login. openLive may return a server-side media source for the live proxy;
+ * callers must not serialize that object.
  * URL userinfo is stripped from text fields so a stream address cannot
  * carry a secret into the client.
  */
@@ -204,6 +206,15 @@ export function createCameraStore(dbPath) {
   const markReady = db.prepare(`
     UPDATE cameras SET status = 'ready' WHERE id = ?
   `);
+  const updateInventoryStmt = db.prepare(`
+    UPDATE cameras SET name = ?, site = ?, group_name = ? WHERE id = ?
+  `);
+  const deleteCred = db.prepare(`
+    DELETE FROM camera_credentials WHERE camera_id = ?
+  `);
+  const deleteCamera = db.prepare(`
+    DELETE FROM cameras WHERE id = ?
+  `);
 
   function read(id) {
     const row = getStmt.get(id);
@@ -228,6 +239,30 @@ export function createCameraStore(dbPath) {
       const createdAt = new Date().toISOString();
       insertStmt.run(id, name, site, group, createdAt);
       return publicCamera({ id, name, site, group, status: 'unknown', createdAt });
+    },
+
+    async updateInventory(id, input) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      const current = read(id);
+      if (!current) return { error: 'not_found' };
+      const name = hasOwn(input, 'name') ? cleanText(input.name, 'name') : current.name;
+      const site = hasOwn(input, 'site') ? cleanText(input.site, 'site', true) : (current.site ?? null);
+      const group = hasOwn(input, 'group') ? cleanText(input.group, 'group', true) : (current.group ?? null);
+      updateInventoryStmt.run(name, site, group, id);
+      const camera = read(id);
+      if (!camera) return { error: 'not_found' };
+      return { camera };
+    },
+
+    async remove(id) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      if (!read(id)) return { error: 'not_found' };
+      transaction(db, () => {
+        deleteCred.run(id);
+        deleteSnapshot.run(id);
+        deleteCamera.run(id);
+      });
+      return { id };
     },
 
     async saveAuthenticated(input) {
@@ -463,6 +498,10 @@ function transaction(db, fn) {
     }
     throw err;
   }
+}
+
+function hasOwn(value, key) {
+  return !!value && Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function cleanText(value, field, optional = false) {

@@ -1,6 +1,6 @@
 # Vision NVR
 
-WS1-U6 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, configures that camera from non-secret device information, runs non-media test checks with the stored login, and closes onboarding with Review and Success. Live View then shows a picture for a camera whose status is `ready`. The media URI and the login stay on the server. The browser only receives a same-origin proxy path.
+WS1 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, configures that camera from non-secret device information, runs non-media test checks with the stored login, and closes onboarding with Review and Success. Live View then shows a picture for a camera whose status is `ready`. The Cameras inventory lists saved cameras and can change name, site, and group, or remove a camera. Adding a camera stays on the wizard. The media URI and the login stay on the server. The browser only receives a same-origin proxy path.
 
 ## Run locally
 
@@ -236,13 +236,39 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
   -d '{"host":"192.0.2.10","port":80,"username":"<redacted>","password":"<redacted>"}'
 ```
 
+## Camera inventory
+
+The Cameras page lists every saved camera. Columns are name, site, group, status, and a device label (manufacturer and model, or the profile label when that is already public). Status chips use the public statuses already stored on the camera: `unknown`, `authenticated`, `configured`, and `ready`.
+
+Adding a camera is still the wizard (Discover, Authenticate, Configure, Test, Review, Success) or the Add Camera form for a name, site, and group. Inventory does not ask for a login and does not open a stream. Live View still shows a camera only when its status is `ready`.
+
+`GET /api/cameras` and `GET /api/cameras/:id` return the public allowlist. They may include `id`, `name`, `site`, `group`, `status`, `createdAt`, and, when those values are already saved, `manufacturer`, `model`, `profileId`, `profileLabel`, `lastTestAt`, `lastTestSummary`, and `reviewedAt`. They do not include a username, a password, firmware, or a stream URL.
+
+`PATCH /api/cameras/:id` changes `name`, `site`, and `group` only. Any other field is ignored, including a username, password, firmware, or stream URL. Status, manufacturer, model, profile, test summary, and review time stay as they were. The response is the same public camera record. Text that contains URL userinfo is stored without that userinfo. An unknown id is HTTP 404. A blank name is HTTP 400. Neither error body includes the request.
+
+`DELETE /api/cameras/:id` removes that camera, the stored login, and the device snapshot. The response is below. An unknown id is HTTP 404. Live View loads the camera list again, drops that tile, and clears its picture request so the page does not keep a stream for the removed id.
+
+```bash
+curl -sS http://127.0.0.1:8787/api/cameras
+curl -sS -X PATCH http://127.0.0.1:8787/api/cameras/<id> \
+  -H 'content-type: application/json' \
+  -d '{"name":"Gate","site":"Main","group":"Exterior"}'
+curl -sS -X DELETE http://127.0.0.1:8787/api/cameras/<id>
+```
+
+```json
+{"ok":true,"deleted":true,"id":"<id>"}
+```
+
 ## API
 
 | Method | Path | Behavior |
 | --- | --- | --- |
-| `GET` | `/api/cameras` | JSON array. Empty until a camera is saved. |
-| `POST` | `/api/cameras` | Saves `name`, `site`, and `group`. Status is `unknown`. |
+| `GET` | `/api/cameras` | JSON array of public camera rows. Empty until a camera is saved. |
+| `POST` | `/api/cameras` | Saves `name`, `site`, and `group`. Status is `unknown`. Other fields are dropped. |
 | `GET` | `/api/cameras/:id` | Public camera record, or `404`. |
+| `PATCH` | `/api/cameras/:id` | Updates `name`, `site`, and `group` only. Other fields are ignored. Secrets are not returned. |
+| `DELETE` | `/api/cameras/:id` | Removes the camera and its stored login. Live View drops that tile. |
 | `GET` | `/api/cameras/:id/stream` | For a ready camera with a profile, a same-origin `/live` path and `delivery: "mjpeg"`. Otherwise 409 or 502. No media URI. |
 | `GET` | `/api/cameras/:id/live` | JPEG frames for that ready camera. The login and media URI stay on the server. |
 | `POST` | `/api/onvif/discover` | Live WS-Discovery probe. `implemented: true`. `devices` is an array. |
@@ -262,10 +288,10 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/discover -H 'content-type: appl
 curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/test -H 'content-type: application/json' -d '{}'
 ```
 
-Saved cameras from `POST /api/cameras` accept a display name, site, and group only. That route drops every other field, including a password. Text that contains URL userinfo is stored without that userinfo. Camera list responses never include a stream URL. The stream route returns only a same-origin proxy path, and only after the camera is `ready`. A password is stored only by the authenticate route, and only in `camera_credentials`.
+Saved cameras from `POST /api/cameras` accept a display name, site, and group only. That route drops every other field, including a password. `PATCH /api/cameras/:id` changes only those three fields and leaves status and device info in place. `DELETE /api/cameras/:id` removes the row and the stored login. Text that contains URL userinfo is stored without that userinfo. Camera list responses never include a stream URL. The stream route returns only a same-origin proxy path, and only after the camera is `ready`. A password is stored only by the authenticate route, and only in `camera_credentials`.
 
-`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, non-media test checks with an injected device client, review and success for a passed test, rejection of untested and failed-test cameras, refusal of streams for cameras that are not ready, a proxied frame for a ready camera with an injected media client, and that secret-bearing fields are not logged or returned.
+`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, non-media test checks with an injected device client, review and success for a passed test, rejection of untested and failed-test cameras, refusal of streams for cameras that are not ready, a proxied frame for a ready camera with an injected media client, inventory list, edit, and delete without secrets, and that secret-bearing fields are not logged or returned.
 
 ## UI scope
 
-Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles show ready cameras, with a connecting line or an error line until frames arrive. Playback, Storage, and Settings stay shells. Camera records added in the UI show under Cameras; they do not start video until Success has marked them ready and Live View opens the proxy. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. Test runs network, authentication, ONVIF, and saved device-info checks for a configured camera. Stream checks in Test stay skipped. Review shows the non-secret summary and confirms it. Success marks the camera ready. Configure, Test, Review, and Success do not ask for the password again and they do not open a stream.
+Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles show ready cameras, with a connecting line or an error line until frames arrive. Playback, Storage, and Settings stay shells. The Cameras inventory lists saved cameras and can edit name, site, and group, or remove a camera. Removing a camera drops its Live View tile. Adding a camera stays on the wizard or the Add Camera form. Camera records do not start video until Success has marked them ready and Live View opens the proxy. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. Test runs network, authentication, ONVIF, and saved device-info checks for a configured camera. Stream checks in Test stay skipped. Review shows the non-secret summary and confirms it. Success marks the camera ready. Configure, Test, Review, Success, and the inventory edit form do not ask for the password again and they do not open a stream.

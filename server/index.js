@@ -126,13 +126,34 @@ async function dispatch(req, res, store, discoverOptions, authOptions, interroga
   }
 
   const cameraMatch = pathname.match(/^\/api\/cameras\/([^/]+)$/);
-  if (req.method === 'GET' && cameraMatch) {
-    const camera = await store.get(decodeId(cameraMatch[1]));
-    if (!camera) {
+  if (cameraMatch && (req.method === 'GET' || req.method === 'PATCH' || req.method === 'DELETE')) {
+    const id = decodeId(cameraMatch[1]);
+    if (req.method === 'GET') {
+      const camera = await store.get(id);
+      if (!camera) {
+        sendJson(res, 404, { ok: false, error: 'not_found' });
+        return;
+      }
+      sendJson(res, 200, camera);
+      return;
+    }
+    if (req.method === 'DELETE') {
+      await readBody(req);
+      const outcome = await store.remove(id);
+      if (outcome.error === 'not_found') {
+        sendJson(res, 404, { ok: false, error: 'not_found' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, deleted: true, id: outcome.id });
+      return;
+    }
+    const body = await readBody(req);
+    const outcome = await store.updateInventory(id, inventoryFields(body));
+    if (outcome.error === 'not_found') {
       sendJson(res, 404, { ok: false, error: 'not_found' });
       return;
     }
-    sendJson(res, 200, camera);
+    sendJson(res, 200, outcome.camera);
     return;
   }
 
@@ -272,6 +293,14 @@ async function* watchFirstFrame(frames, onFirst) {
     }
     yield frame;
   }
+}
+
+function inventoryFields(body) {
+  const fields = {};
+  if (body && Object.prototype.hasOwnProperty.call(body, 'name')) fields.name = body.name;
+  if (body && Object.prototype.hasOwnProperty.call(body, 'site')) fields.site = body.site;
+  if (body && Object.prototype.hasOwnProperty.call(body, 'group')) fields.group = body.group;
+  return fields;
 }
 
 function configureFields(body) {

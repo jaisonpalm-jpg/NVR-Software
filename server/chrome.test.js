@@ -28,7 +28,7 @@ test('shell chrome uses charcoal panels and an electric-blue primary accent', ()
   assert.match(html, /\.site-card\.active \{[^}]*rgba\(47,107,255/);
   assert.match(html, /class="setup-grid wizard-steps"/);
   assert.match(html, /\.wizard-steps > \.card \.card-title::before \{[^}]*background:\s*var\(--blue\)/);
-  assert.equal((html.match(/class="btn btn-primary"/g) || []).length, 9);
+  assert.equal((html.match(/class="btn btn-primary"/g) || []).length, 10);
   assert.equal((html.match(/\+ Add Camera/g) || []).length, 2);
   assert.equal((html.match(/type="password"/g) || []).length, 1);
   assert.equal(/localStorage|sessionStorage|document\.cookie/.test(html), false);

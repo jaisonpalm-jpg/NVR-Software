@@ -357,10 +357,37 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
   .page-grid { grid-template-columns: 1fr; }
 }
 #cameras { min-width: 0; }
-#cameras > .page-grid { height: 100%; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); }
+#cameras > .page-grid {
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(220px, 42%) minmax(0, 1fr);
+}
 #cameras .panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 #cameras .panel-body, #cameras .card, #cameras .card-sub { min-width: 0; overflow-wrap: anywhere; }
 #cameras .section-head > div { min-width: 0; }
+.inventory-table { width: 100%; border-collapse: collapse; }
+.inventory-table th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 850;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.inventory-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  vertical-align: middle;
+  font-size: 13px;
+}
+.inventory-table tbody tr:hover td { background: rgba(47,107,255,.08); }
+.inventory-table th:last-child, .inventory-table td:last-child { text-align: right; }
+.inventory-table tbody tr.inventory-empty td { text-align: left; }
+.inventory-table tbody tr.inventory-empty:hover td { background: transparent; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.row-actions .btn { padding: 8px 10px; }
 
 @media (max-width: 760px) {
   #cameras > .page-grid { grid-template-columns: 1fr; }
@@ -460,7 +487,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
 
   <main class="page" id="cameras">
     <div class="page-grid">
-      <aside class="panel">
+      <section class="panel" id="camera-inventory">
         <div class="section-head">
           <div>
             <div class="section-title">Cameras</div>
@@ -468,13 +495,27 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
           </div>
           <button class="btn btn-primary" type="button" onclick="openModal()">+ Add Camera</button>
         </div>
-        <div class="panel-body" id="camera-list" aria-live="polite"></div>
-      </aside>
+        <div class="panel-body" id="camera-list" aria-live="polite">
+          <table class="inventory-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Site</th>
+                <th>Group</th>
+                <th>Status</th>
+                <th>Device</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="camera-rows"></tbody>
+          </table>
+        </div>
+      </section>
       <section class="panel">
         <div class="section-head">
           <div>
             <div class="section-title">ONVIF</div>
-            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Configure reads the device with that login and saves name, site, and group. Test checks that saved camera without opening a stream. Review confirms the non-secret summary, then Success marks the camera ready for Live View in a later unit.</div>
+            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Configure reads the device with that login and saves name, site, and group. Test checks that saved camera without opening a stream. Review confirms the non-secret summary, then Success marks the camera ready. The inventory above edits name, site, and group, or removes a camera. Live View lists a camera only when its status is ready.</div>
           </div>
         </div>
         <div class="panel-body">
@@ -657,14 +698,70 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
   </div>
 </div>
 
+<div class="modal-backdrop" id="editCameraModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-camera-title">
+    <div class="section-head">
+      <div>
+        <div class="section-title" id="edit-camera-title">Edit camera</div>
+        <div class="section-sub">Name, site, and group only. Login stays on the server.</div>
+      </div>
+    </div>
+    <form id="edit-camera-form">
+      <div class="panel-body">
+        <div class="field">
+          <label for="edit-camera-name">Camera name</label>
+          <input id="edit-camera-name" name="name" maxlength="120" autocomplete="off" required />
+        </div>
+        <div class="field">
+          <label for="edit-camera-site">Site</label>
+          <input id="edit-camera-site" name="site" maxlength="120" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="edit-camera-group">Group</label>
+          <input id="edit-camera-group" name="group" maxlength="120" autocomplete="off" />
+        </div>
+        <p class="card-sub" id="edit-camera-error" role="status"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" id="edit-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="removeCameraModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="remove-camera-title">
+    <div class="section-head">
+      <div>
+        <div class="section-title" id="remove-camera-title">Remove camera</div>
+        <div class="section-sub">This removes <span id="remove-camera-name">the camera</span> from the inventory. Live View drops its tile.</div>
+      </div>
+    </div>
+    <div class="panel-body">
+      <p class="card-sub" id="remove-camera-error" role="status"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" type="button" id="remove-cancel">Cancel</button>
+      <button class="btn" type="button" id="remove-confirm">Remove camera</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const navBtns = document.querySelectorAll('.nav-btn');
   const pages = document.querySelectorAll('.page');
   const modal = document.getElementById('addCameraModal');
+  const editModal = document.getElementById('editCameraModal');
+  const removeModal = document.getElementById('removeCameraModal');
   const cameraList = document.getElementById('camera-list');
   const cameraCount = document.getElementById('camera-count');
   const addForm = document.getElementById('add-camera-form');
   const addError = document.getElementById('add-camera-error');
+  const editForm = document.getElementById('edit-camera-form');
+  const editError = document.getElementById('edit-camera-error');
+  let editingId = '';
+  let removingId = '';
   let selectedDevice = null;
   let cameraRecords = [];
   let selectedCameraId = '';
@@ -705,65 +802,113 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
     if (event.target === modal) closeModal();
   });
 
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  editModal.addEventListener('click', (event) => {
+    if (event.target === editModal) closeEdit();
   });
+
+  removeModal.addEventListener('click', (event) => {
+    if (event.target === removeModal) closeRemove();
+  });
+
+  document.getElementById('edit-cancel').addEventListener('click', closeEdit);
+  document.getElementById('remove-cancel').addEventListener('click', closeRemove);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (removeModal.classList.contains('open')) closeRemove();
+    else if (editModal.classList.contains('open')) closeEdit();
+    else if (modal.classList.contains('open')) closeModal();
+  });
+
+  function inventoryMessage(titleText, subText) {
+    const row = document.createElement('tr');
+    row.className = 'inventory-empty';
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    const title = document.createElement('div');
+    title.className = 'row-title';
+    title.textContent = titleText;
+    const sub = document.createElement('div');
+    sub.className = 'row-sub';
+    sub.textContent = subText;
+    cell.append(title, sub);
+    row.append(cell);
+    return row;
+  }
+
+  function inventoryDevice(camera) {
+    const vendor = [camera.manufacturer, camera.model].filter((value) => typeof value === 'string' && value).join(' ');
+    const profile = typeof camera.profileLabel === 'string' ? camera.profileLabel : '';
+    if (vendor && profile) return vendor + ' · ' + profile;
+    return vendor || profile || '—';
+  }
+
+  function statusChip(status) {
+    const known = {
+      unknown: 'pill gray',
+      authenticated: 'pill green',
+      configured: 'pill green',
+      ready: 'pill green'
+    };
+    const pill = document.createElement('span');
+    const value = Object.prototype.hasOwnProperty.call(known, status) ? status : 'unknown';
+    pill.className = known[value];
+    pill.textContent = value;
+    return pill;
+  }
+
+  function actionButton(label, className, id) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn ' + className;
+    button.textContent = label;
+    button.dataset.id = id;
+    return button;
+  }
+
+  function inventoryRow(camera) {
+    const row = document.createElement('tr');
+    if (camera.id) row.dataset.id = camera.id;
+    const name = document.createElement('td');
+    name.textContent = camera.name || 'Camera';
+    const site = document.createElement('td');
+    site.textContent = camera.site || '—';
+    const group = document.createElement('td');
+    group.textContent = camera.group || '—';
+    const status = document.createElement('td');
+    status.append(statusChip(camera.status));
+    const device = document.createElement('td');
+    device.textContent = inventoryDevice(camera);
+    const actions = document.createElement('td');
+    const wrap = document.createElement('div');
+    wrap.className = 'row-actions';
+    if (camera.id) {
+      wrap.append(actionButton('Edit', 'inventory-edit', camera.id));
+      wrap.append(actionButton('Remove', 'inventory-remove', camera.id));
+      if (camera.status === 'authenticated' || camera.status === 'configured' || camera.status === 'ready') {
+        wrap.append(actionButton('Configure', 'configure-pick', camera.id));
+      }
+    }
+    actions.append(wrap);
+    row.append(name, site, group, status, device, actions);
+    return row;
+  }
 
   function renderCameras(cameras) {
     cameraRecords = cameras;
-    cameraList.replaceChildren();
+    const rows = document.getElementById('camera-rows');
+    rows.replaceChildren();
     cameraCount.textContent = cameras.length ? cameras.length + ' saved' : 'No cameras saved';
     if (!cameras.length) {
-      const row = document.createElement('div');
-      row.className = 'list-row';
-      const text = document.createElement('div');
-      const title = document.createElement('div');
-      title.className = 'row-title';
-      title.textContent = 'No cameras saved';
-      const sub = document.createElement('div');
-      sub.className = 'row-sub';
-      sub.textContent = 'Authenticate a discovered device, then configure and test it. Review and Success finish onboarding.';
-      text.append(title, sub);
-      row.append(text);
-      cameraList.append(row);
-      fillTestCameras(cameras);
-      fillReviewCameras(cameras);
-      fillSuccessCameras(cameras);
-      return;
+      rows.append(inventoryMessage(
+        'No cameras saved',
+        'Add a camera from the wizard. Live View lists a camera only when its status is ready.'
+      ));
+    } else {
+      cameras.forEach((camera) => {
+        rows.append(inventoryRow(camera));
+      });
     }
-    cameras.forEach((camera) => {
-      const row = document.createElement('div');
-      row.className = 'list-row';
-      const text = document.createElement('div');
-      const title = document.createElement('div');
-      title.className = 'row-title';
-      title.textContent = camera.name || 'Camera';
-      const sub = document.createElement('div');
-      sub.className = 'row-sub';
-      const place = [camera.site, camera.group].filter(Boolean).join(' · ');
-      const device = [camera.manufacturer, camera.model].filter(Boolean).join(' ');
-      const profile = camera.profileLabel ? 'Profile ' + camera.profileLabel : '';
-      const tested = camera.lastTestSummary === 'passed'
-        ? 'Last test passed'
-        : camera.lastTestSummary === 'failed'
-          ? 'Last test failed'
-          : '';
-      sub.textContent = [place, device, profile, tested].filter(Boolean).join(' · ') || 'No site';
-      text.append(title, sub);
-      const pill = document.createElement('span');
-      pill.className = camera.status === 'configured' || camera.status === 'authenticated' || camera.status === 'ready' ? 'pill green' : 'pill gray';
-      pill.textContent = camera.status || 'unknown';
-      row.append(text, pill);
-      if ((camera.status === 'authenticated' || camera.status === 'configured' || camera.status === 'ready') && camera.id) {
-        const pick = document.createElement('button');
-        pick.type = 'button';
-        pick.className = 'btn configure-pick';
-        pick.textContent = 'Configure';
-        pick.dataset.id = camera.id;
-        row.append(pick);
-      }
-      cameraList.append(row);
-    });
     fillTestCameras(cameras);
     fillReviewCameras(cameras);
     fillSuccessCameras(cameras);
@@ -778,19 +923,12 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
     } catch {
       cameraRecords = [];
       cameraCount.textContent = 'Camera list unavailable';
-      cameraList.replaceChildren();
-      const row = document.createElement('div');
-      row.className = 'list-row';
-      const title = document.createElement('div');
-      title.className = 'row-title';
-      title.textContent = 'API unavailable';
-      const sub = document.createElement('div');
-      sub.className = 'row-sub';
-      sub.textContent = 'Start the VMS process and open this page from it.';
-      const text = document.createElement('div');
-      text.append(title, sub);
-      row.append(text);
-      cameraList.append(row);
+      document.getElementById('camera-rows').replaceChildren(
+        inventoryMessage('API unavailable', 'Start the VMS process and open this page from it.')
+      );
+      fillTestCameras([]);
+      fillReviewCameras([]);
+      fillSuccessCameras([]);
     }
   }
 
@@ -1148,6 +1286,16 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
   });
 
   cameraList.addEventListener('click', (event) => {
+    const editButton = event.target.closest('button.inventory-edit');
+    if (editButton) {
+      openEdit(editButton.dataset.id);
+      return;
+    }
+    const removeButton = event.target.closest('button.inventory-remove');
+    if (removeButton) {
+      openRemove(removeButton.dataset.id);
+      return;
+    }
     const button = event.target.closest('button.configure-pick');
     if (!button) return;
     const camera = cameraRecords.find((item) => item.id === button.dataset.id);
@@ -1164,6 +1312,105 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
     document.getElementById('interrogate-btn').disabled = false;
     document.getElementById('configure-btn').disabled = false;
     document.getElementById('configure-name').focus();
+  });
+
+  function openEdit(id) {
+    const camera = cameraRecords.find((item) => item.id === id);
+    if (!camera) return;
+    editingId = camera.id;
+    editError.textContent = '';
+    document.getElementById('edit-camera-name').value = camera.name || '';
+    document.getElementById('edit-camera-site').value = camera.site || '';
+    document.getElementById('edit-camera-group').value = camera.group || '';
+    editModal.classList.add('open');
+    document.getElementById('edit-camera-name').focus();
+  }
+
+  function closeEdit() {
+    editModal.classList.remove('open');
+    editForm.reset();
+    editingId = '';
+    editError.textContent = '';
+  }
+
+  function openRemove(id) {
+    const camera = cameraRecords.find((item) => item.id === id);
+    if (!camera) return;
+    removingId = camera.id;
+    document.getElementById('remove-camera-error').textContent = '';
+    document.getElementById('remove-camera-name').textContent = camera.name || 'Camera';
+    removeModal.classList.add('open');
+  }
+
+  function closeRemove() {
+    removeModal.classList.remove('open');
+    removingId = '';
+    document.getElementById('remove-camera-error').textContent = '';
+  }
+
+  function clearConfigureSelection() {
+    selectedCameraId = '';
+    profilesLoaded = false;
+    document.getElementById('configure-target').textContent = 'Select an authenticated camera.';
+    document.getElementById('configure-name').value = '';
+    document.getElementById('configure-site').value = '';
+    document.getElementById('configure-group').value = '';
+    document.getElementById('configure-device').textContent = '';
+    document.getElementById('configure-result').textContent = '';
+    resetProfiles();
+    document.getElementById('interrogate-btn').disabled = true;
+    document.getElementById('configure-btn').disabled = true;
+  }
+
+  editForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    editError.textContent = '';
+    const id = editingId;
+    if (!id) return;
+    const payload = {
+      name: document.getElementById('edit-camera-name').value.trim(),
+      site: document.getElementById('edit-camera-site').value.trim(),
+      group: document.getElementById('edit-camera-group').value.trim()
+    };
+    if (!payload.name) {
+      editError.textContent = 'Enter a camera name.';
+      return;
+    }
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error('save failed');
+      closeEdit();
+      await loadCameras();
+    } catch {
+      editError.textContent = 'Camera could not be saved.';
+    }
+  });
+
+  document.getElementById('remove-confirm').addEventListener('click', async () => {
+    const id = removingId;
+    const error = document.getElementById('remove-camera-error');
+    error.textContent = '';
+    if (!id) return;
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(id), {
+        method: 'DELETE',
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer'
+      });
+      if (!response.ok) throw new Error('remove failed');
+      closeRemove();
+      if (selectedCameraId === id) clearConfigureSelection();
+      releaseLiveCamera(id);
+      await loadCameras();
+    } catch {
+      error.textContent = 'Camera could not be removed.';
+    }
   });
 
   function resetProfiles() {
@@ -1590,9 +1837,21 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outl
     });
   }
 
+  function releaseLiveCamera(id) {
+    liveToken += 1;
+    document.querySelectorAll('#camera-wall .live-tile').forEach((tile) => {
+      if (tile.dataset.cameraId !== id) return;
+      const frame = tile.querySelector('img');
+      if (frame) frame.removeAttribute('src');
+      tile.remove();
+    });
+    loadLive();
+  }
+
   function buildLiveTile(camera, token) {
     const article = document.createElement('article');
     article.className = 'feed live-tile';
+    if (camera.id) article.dataset.cameraId = camera.id;
     const top = document.createElement('div');
     top.className = 'feed-top';
     const titles = document.createElement('div');
