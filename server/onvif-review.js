@@ -4,7 +4,8 @@
  * Both steps read the saved non-secret camera row. They do not call the
  * device, do not read stored login, and do not open a stream. A camera can
  * be reviewed only when it is configured and the last test summary is
- * passed. Success then marks that camera ready for a later Live View unit.
+ * passed. Success then marks that camera ready. Live View opens a stream
+ * on its own route. This module does not.
  */
 
 const REVIEW_CONTRACT = 'onvif.review.v0';

@@ -1,6 +1,6 @@
 # Vision NVR
 
-WS1-U5 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, configures that camera from non-secret device information, runs non-media test checks with the stored login, and closes onboarding with Review and Success. This unit does not open streams or play video. Live View is the next unit. Credentials stay on the server.
+WS1-U6 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, configures that camera from non-secret device information, runs non-media test checks with the stored login, and closes onboarding with Review and Success. Live View then shows a picture for a camera whose status is `ready`. The media URI and the login stay on the server. The browser only receives a same-origin proxy path.
 
 ## Run locally
 
@@ -59,7 +59,7 @@ The process must be allowed to send and receive UDP on the LAN interface. Replie
 
 This cloud agent VM has no route to a camera LAN. The probe still runs. With no answers it returns `devices: []`.
 
-IPv6 discovery is a later unit. Authentication, configure, and test call the ONVIF device service. Configure also calls GetProfiles on a same-host media service when the device advertises one. Test does not. This unit does not resolve an RTSP URI, start WebRTC, or start a media server such as MediaMTX or go2rtc.
+IPv6 discovery is a later unit. Authentication, configure, and test call the ONVIF device service. Configure also calls GetProfiles on a same-host media service when the device advertises one. Test does not. Live View, and only for a `ready` camera, calls GetStreamUri on that same-host media service and proxies frames. WebRTC, MediaMTX, and go2rtc are not started.
 
 ## Authenticate a discovered device
 
@@ -89,7 +89,7 @@ Configure uses the login already stored in `camera_credentials`. The operator do
 
 `POST /api/cameras/:id/interrogate` loads that stored login and calls `GetDeviceInformation` and `GetCapabilities` on the device service. When capabilities advertise a media service on the same host, it calls `GetProfiles` there. It does not call `GetStreamUri`. The response is non-secret device information and profile ids and labels. A media address with URL userinfo is stripped before use, and a media address on a different host is ignored. Username, password, serial number, and stream URIs are not returned. A failed read returns `auth_failed` or `unreachable` and does not change the camera.
 
-`POST /api/cameras/:id/configure` saves `name`, `site`, and `group`, plus an optional `profileId` chosen from the profiles just read. The saved camera status is `configured`. Public GETs may then include `manufacturer`, `model`, `profileId`, and `profileLabel`. They still do not include the login, a stream URL, or firmware. `GET /api/cameras/:id/stream` stays `{ "stream": null, "delivery": "unavailable" }`. Saving before a successful read returns `not_interrogated`. A camera with no stored login returns `not_authenticated`. Signing in again clears the saved device fields and sets status back to `authenticated`.
+`POST /api/cameras/:id/configure` saves `name`, `site`, and `group`, plus an optional `profileId` chosen from the profiles just read. The saved camera status is `configured`. Public GETs may then include `manufacturer`, `model`, `profileId`, and `profileLabel`. They still do not include the login, a stream URL, or firmware. `GET /api/cameras/:id/stream` returns HTTP 409 until the camera is `ready`. Saving before a successful read returns `not_interrogated`. A camera with no stored login returns `not_authenticated`. Signing in again clears the saved device fields and sets status back to `authenticated`.
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/interrogate \
@@ -123,7 +123,7 @@ Deferred checks stay `skipped` with reason `not_implemented`: `mainStream`, `sub
 
 A finished run returns HTTP 200. `summary` is `passed` when every real check passed, otherwise `failed`. `ok` follows that summary. The server stores only `lastTestAt` and `lastTestSummary` (`passed` or `failed`). Public GETs may include those two fields. They still omit the login, firmware, and any stream URL. Signing in again clears the test summary with the other saved device fields.
 
-A camera that is not configured returns `not_configured` (HTTP 409). A camera with no stored login returns `not_authenticated`. An unknown id returns `not_found`. Those errors do not include the request body. `GET /api/cameras/:id/stream` stays `{ "stream": null, "delivery": "unavailable" }`.
+A camera that is not configured returns `not_configured` (HTTP 409). A camera with no stored login returns `not_authenticated`. An unknown id returns `not_found`. Those errors do not include the request body. `GET /api/cameras/:id/stream` returns HTTP 409 while the camera is not `ready`.
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/test \
@@ -163,9 +163,9 @@ Review and Success run after a passed Test. They do not call the device and they
 
 `POST /api/cameras/:id/review` confirms the non-secret summary for a camera whose status is `configured` and whose `lastTestSummary` is `passed`. The server stores `reviewedAt`. Status stays `configured`. A camera that has not passed Test returns `not_tested` (HTTP 409). A camera whose last test failed returns `test_failed` (HTTP 409). Confirming again keeps the same `reviewedAt`.
 
-`POST /api/cameras/:id/success` marks that reviewed camera `ready`. `ready` means onboarding is finished and the camera can be used by Live View in a later unit. It does not mean a stream is open, and it does not mean the device was contacted again. Success before review returns `not_reviewed` (HTTP 409). The same not-tested and failed-test rejections apply. Marking a camera that is already `ready` returns the saved row again.
+`POST /api/cameras/:id/success` marks that reviewed camera `ready`. `ready` means onboarding is finished and Live View may open a picture. Success itself does not contact the device and does not open a stream. Success before review returns `not_reviewed` (HTTP 409). The same not-tested and failed-test rejections apply. Marking a camera that is already `ready` returns the saved row again.
 
-Public GETs may include `reviewedAt` after review, and `status` `ready` after success. They still omit the login, firmware, and any stream URL. `GET /api/cameras/:id/stream` stays `{ "stream": null, "delivery": "unavailable" }`.
+Public GETs may include `reviewedAt` after review, and `status` `ready` after success. They still omit the login, firmware, and any stream URL. The stream route is a separate request and is described under Live View.
 
 A new Test run clears `reviewedAt`, so Success requires Review again. Saving Configure again returns status to `configured` and clears `reviewedAt`. The last test summary remains until a new test or a new sign-in. Signing in again clears the test summary, the review time, and the ready state, and sets status back to `authenticated`.
 
@@ -190,6 +190,46 @@ The Cameras page **Review** card lists cameras that passed Test and shows name, 
 
 This step does not need a camera LAN. No device call is made.
 
+## Live View
+
+Live View plays a picture for cameras whose status is `ready`. The browser never receives the camera login or the media URI.
+
+`GET /api/cameras/:id/stream` is the public contract.
+
+- A camera that is not `ready` returns HTTP 409 `not_ready`.
+- A camera with no stored login returns HTTP 409 `not_authenticated`.
+- A ready camera with no saved profile returns HTTP 409 `missing_profile`.
+- An unknown id returns HTTP 404 `not_found`.
+- A ready camera with a profile makes the server call ONVIF GetStreamUri on the media service advertised for that same host, using the stored login. A media URI on a different host is rejected. The URI stays on the server.
+- When that call succeeds, the response is the proxy path only:
+
+```json
+{
+  "ok": true,
+  "contract": "onvif.stream.v0",
+  "cameraId": "<id>",
+  "stream": "/api/cameras/<id>/live",
+  "delivery": "mjpeg",
+  "profileId": "<profile>"
+}
+```
+
+`stream` is a same-origin path. It is not a media URI. `GET /api/cameras/:id/live` resolves the URI again and proxies JPEG frames as `multipart/x-mixed-replace`. The page shows those frames in the tile, or the words Connecting or a fixed error line. Tiles do not show a recording badge or a frame-rate badge.
+
+A device that rejects the login returns HTTP 401 `auth_failed`. A device that does not answer returns HTTP 502 `unreachable`. A resolved URI that cannot be pulled returns HTTP 502 `stream_unavailable`. Those bodies have no login and no media URI.
+
+The Live View page loads `/api/cameras` and, for each ready camera, `/api/cameras/<id>/stream`. It then sets the tile image to the returned path only when that path is exactly `/api/cameras/<id>/live`. It does not render response bodies.
+
+### Verify with a real ONVIF camera
+
+1. Install `ffmpeg` on the machine that runs this server. The server uses it to read the camera URI and write JPEG frames. The browser does not open that URI.
+2. Run `npm start` on a host that can reach the camera LAN.
+3. Discover the camera, authenticate, configure a profile, run Test, confirm Review, and mark Success.
+4. Open Live View. The ready camera tile connects and shows frames.
+5. In the browser network panel, confirm the stream and live responses contain no username, no password, and no media URI.
+
+This cloud VM has no route to a camera LAN, and a physical camera was not viewed here. `npm test` injects `streamOptions.client` for GetStreamUri and `streamOptions.frameSource` for frames. Without a puller, or when the device does not answer, the live route returns `stream_unavailable` or `unreachable` and still omits the URI. A Founder check on a real camera is still required.
+
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
   -H 'content-type: application/json' \
@@ -203,7 +243,8 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
 | `GET` | `/api/cameras` | JSON array. Empty until a camera is saved. |
 | `POST` | `/api/cameras` | Saves `name`, `site`, and `group`. Status is `unknown`. |
 | `GET` | `/api/cameras/:id` | Public camera record, or `404`. |
-| `GET` | `/api/cameras/:id/stream` | `{ "stream": null, "delivery": "unavailable" }`. No stream URL. |
+| `GET` | `/api/cameras/:id/stream` | For a ready camera with a profile, a same-origin `/live` path and `delivery: "mjpeg"`. Otherwise 409 or 502. No media URI. |
+| `GET` | `/api/cameras/:id/live` | JPEG frames for that ready camera. The login and media URI stay on the server. |
 | `POST` | `/api/onvif/discover` | Live WS-Discovery probe. `implemented: true`. `devices` is an array. |
 | `POST` | `/api/onvif/authenticate` | Device-service login. Stores credentials only in SQLite. Response has no username or password. |
 | `POST` | `/api/cameras/:id/interrogate` | Reads device info and profiles with the stored login. Response has no username, password, or stream URL. |
@@ -211,7 +252,7 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
 | `POST` | `/api/cameras/:id/test` | Non-media checks for a configured camera, using the stored login. Media checks are `skipped`. |
 | `POST` | `/api/onvif/test` | Same test. Body is `{ "cameraId": "<id>" }`. Other fields are ignored. |
 | `POST` | `/api/cameras/:id/review` | Confirms the non-secret summary after a passed test. Stores `reviewedAt`. Body is `{ "confirm": true }`. |
-| `POST` | `/api/cameras/:id/success` | Marks a reviewed camera `ready` without opening a stream. Body is `{ "confirm": true }`. |
+| `POST` | `/api/cameras/:id/success` | Marks a reviewed camera `ready`. This call does not open a stream. Body is `{ "confirm": true }`. |
 
 Example:
 
@@ -221,10 +262,10 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/discover -H 'content-type: appl
 curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/test -H 'content-type: application/json' -d '{}'
 ```
 
-Saved cameras from `POST /api/cameras` accept a display name, site, and group only. That route drops every other field, including a password. Text that contains URL userinfo is stored without that userinfo. Responses never include a stream URL. A password is stored only by the authenticate route, and only in `camera_credentials`.
+Saved cameras from `POST /api/cameras` accept a display name, site, and group only. That route drops every other field, including a password. Text that contains URL userinfo is stored without that userinfo. Camera list responses never include a stream URL. The stream route returns only a same-origin proxy path, and only after the camera is `ready`. A password is stored only by the authenticate route, and only in `camera_credentials`.
 
-`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, non-media test checks with an injected device client, review and success for a passed test, rejection of untested and failed-test cameras, and that secret-bearing fields are not logged or returned.
+`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, non-media test checks with an injected device client, review and success for a passed test, rejection of untested and failed-test cameras, refusal of streams for cameras that are not ready, a proxied frame for a ready camera with an injected media client, and that secret-bearing fields are not logged or returned.
 
 ## UI scope
 
-Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles are the existing visual placeholders. Playback, Storage, and Settings are shells. Camera records added in the UI show under Cameras; they do not start video. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. Test runs network, authentication, ONVIF, and saved device-info checks for a configured camera. Stream checks stay skipped. Review shows the non-secret summary and confirms it. Success marks the camera ready for Live View in a later unit. Configure, Test, Review, and Success do not ask for the password again and they do not open a stream.
+Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles show ready cameras, with a connecting line or an error line until frames arrive. Playback, Storage, and Settings stay shells. Camera records added in the UI show under Cameras; they do not start video until Success has marked them ready and Live View opens the proxy. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. Test runs network, authentication, ONVIF, and saved device-info checks for a configured camera. Stream checks in Test stay skipped. Review shows the non-secret summary and confirms it. Success marks the camera ready. Configure, Test, Review, and Success do not ask for the password again and they do not open a stream.

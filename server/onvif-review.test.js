@@ -122,6 +122,13 @@ function serverOptions(dbPath, probe, calls) {
         calls.device += 1;
         return { status: 200, async text() { return sentinel; } };
       }
+    },
+    streamOptions: {
+      client: async () => ({
+        ok: false,
+        error: 'unreachable',
+        [secretKey]: sentinel
+      })
     }
   };
 }
@@ -250,10 +257,14 @@ test('review then success marks a passed camera ready and keeps secrets on the s
       assert.equal(one.status, 'ready');
       assertNoSecrets(oneText);
 
-      const streamText = await (await fetch(`${base}/api/cameras/${cameraId}/stream`)).text();
+      const streamRes = await fetch(`${base}/api/cameras/${cameraId}/stream`);
+      const streamText = await streamRes.text();
       const stream = JSON.parse(streamText);
-      assert.equal(stream.stream, null);
-      assert.equal(stream.delivery, 'unavailable');
+      assert.equal(streamRes.status, 502);
+      assert.equal(stream.ok, false);
+      assert.equal(stream.contract, 'onvif.stream.v0');
+      assert.equal(stream.error, 'unreachable');
+      assert.equal(Object.hasOwn(stream, secretKey), false);
       assertNoSecrets(streamText);
       assert.equal(logs.some((line) => line.includes(sentinel) || line.includes(bodySecret) || line.includes('operator')), false);
     } finally {
@@ -332,7 +343,7 @@ test('review and success refuse cameras that were not tested or whose last test 
       assertNoSecrets(missingText);
 
       const streamText = await (await fetch(`${base}/api/cameras/${cameraId}/stream`)).text();
-      assert.equal(JSON.parse(streamText).delivery, 'unavailable');
+      assert.equal(JSON.parse(streamText).error, 'not_ready');
       assert.equal(logs.some((line) => line.includes(sentinel) || line.includes(bodySecret) || line.includes('operator')), false);
     } finally {
       await closeServer(started);
@@ -428,9 +439,10 @@ test('success requires review, a new test or configure clears it, and sign-in cl
     const reset = await (await fetch(`${base}/api/cameras/${cameraId}`)).json();
     assert.equal(reset.status, 'authenticated');
     assert.deepEqual(Object.keys(reset).sort(), PUBLIC_KEYS);
-    const stream = await (await fetch(`${base}/api/cameras/${cameraId}/stream`)).json();
-    assert.equal(stream.stream, null);
-    assert.equal(stream.delivery, 'unavailable');
+    const streamRes = await fetch(`${base}/api/cameras/${cameraId}/stream`);
+    const stream = await streamRes.json();
+    assert.equal(streamRes.status, 409);
+    assert.equal(stream.error, 'not_ready');
   } finally {
     await closeServer(started);
   }

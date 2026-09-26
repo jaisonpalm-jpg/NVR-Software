@@ -314,8 +314,10 @@ test('successful auth marks the camera and keeps secrets on the server', async (
       const streamRes = await fetch(`${base}/api/cameras/${body.cameraId}/stream`);
       const streamText = await streamRes.text();
       const stream = JSON.parse(streamText);
-      assert.equal(stream.stream, null);
-      assert.equal(stream.delivery, 'unavailable');
+      assert.equal(streamRes.status, 409);
+      assert.equal(stream.ok, false);
+      assert.equal(stream.contract, 'onvif.stream.v0');
+      assert.equal(stream.error, 'not_ready');
       assert.equal(streamText.includes('rtsp://'), false);
       assertNoSecrets(streamText);
 

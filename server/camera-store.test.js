@@ -142,10 +142,11 @@ test('camera routes stay sanitized and discover does not echo secrets', async ()
 
     const stream = await fetch(`${base}/api/cameras/${created.id}/stream`);
     const streamText = await stream.text();
-    assert.equal(stream.status, 200);
+    assert.equal(stream.status, 409);
     const streamBody = JSON.parse(streamText);
-    assert.equal(streamBody.stream, null);
-    assert.equal(streamBody.delivery, 'unavailable');
+    assert.equal(streamBody.ok, false);
+    assert.equal(streamBody.contract, 'onvif.stream.v0');
+    assert.equal(streamBody.error, 'not_authenticated');
     assert.equal(streamText.includes(sentinel), false);
     assert.equal(streamText.includes('rtsp://'), false);
 

@@ -5,22 +5,25 @@ import { DatabaseSync } from 'node:sqlite';
 import { parseAuthenticateRequest } from './onvif-auth.js';
 import { runInterrogate } from './onvif-interrogate.js';
 import { buildTestChecks, runDeviceProbe, testSummary } from './onvif-test.js';
+import { runGetStreamUri } from './onvif-stream.js';
 
 /**
  * Camera persistence port.
  *
  * SQLite is the local adapter. A later PostgreSQL adapter can implement the
  * same async methods (list, get, create, saveAuthenticated, interrogate,
- * saveConfigured, runTest, confirmReview, markSuccess, close) without
- * changing camera routes.
+ * saveConfigured, runTest, confirmReview, markSuccess, openLive, close)
+ * without changing camera routes.
  *
  * Public rows are an allowlist: id, name, site, group, status, createdAt,
  * plus optional non-secret configure fields manufacturer, model, profileId,
  * and profileLabel, plus optional lastTestAt, lastTestSummary, and
  * reviewedAt. Device login is stored only in camera_credentials. list, get,
  * create, interrogate, saveConfigured, runTest, confirmReview, and
- * markSuccess never return that table. URL userinfo is stripped from text
- * fields so a stream address cannot carry a secret into the client.
+ * markSuccess never return that table. openLive may return a server-side
+ * media source for the live proxy; callers must not serialize that object.
+ * URL userinfo is stripped from text fields so a stream address cannot
+ * carry a secret into the client.
  */
 
 const PUBLIC_FIELDS = ['id', 'name', 'site', 'group', 'status', 'createdAt'];
@@ -366,6 +369,35 @@ export function createCameraStore(dbPath) {
       const camera = read(id);
       if (!camera) return { error: 'not_found' };
       return { camera };
+    },
+
+    async openLive(id, options = {}) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      const current = read(id);
+      if (!current) return { error: 'not_found' };
+      const creds = getCred.get(id);
+      if (!creds) return { error: 'not_authenticated' };
+      if (current.status !== 'ready') return { error: 'not_ready' };
+      if (typeof current.profileId !== 'string' || !current.profileId) return { error: 'missing_profile' };
+      const outcome = await runGetStreamUri({
+        host: creds.host,
+        port: creds.port,
+        path: creds.path,
+        scheme: creds.scheme,
+        username: creds.username,
+        password: creds.password,
+        profileId: current.profileId
+      }, options);
+      if (!outcome.ok) {
+        return { error: outcome.error === 'auth_failed' ? 'auth_failed' : 'unreachable' };
+      }
+      return {
+        cameraId: current.id,
+        profileId: current.profileId,
+        source: outcome.source,
+        username: creds.username,
+        password: creds.password
+      };
     },
 
     async markSuccess(id) {

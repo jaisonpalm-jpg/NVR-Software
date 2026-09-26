@@ -262,10 +262,13 @@ test('test uses the stored login and skips media checks', async () => {
       assert.match(one.lastTestAt, /^\d{4}-\d{2}-\d{2}T/);
       assertNoSecrets(oneText);
 
-      const streamText = await (await fetch(`${base}/api/cameras/${cameraId}/stream`)).text();
+      const streamRes = await fetch(`${base}/api/cameras/${cameraId}/stream`);
+      const streamText = await streamRes.text();
       const stream = JSON.parse(streamText);
-      assert.equal(stream.stream, null);
-      assert.equal(stream.delivery, 'unavailable');
+      assert.equal(streamRes.status, 409);
+      assert.equal(stream.ok, false);
+      assert.equal(stream.contract, 'onvif.stream.v0');
+      assert.equal(stream.error, 'not_ready');
       assertNoSecrets(streamText);
 
       const alias = await fetch(`${base}/api/onvif/test`, {
@@ -530,7 +533,7 @@ test('test refuses cameras that are not configured and keeps discover and stream
       assert.equal(bareText.includes(sentinel), false);
 
       const streamText = await (await fetch(`${base}/api/cameras/${authed.cameraId}/stream`)).text();
-      assert.equal(JSON.parse(streamText).delivery, 'unavailable');
+      assert.equal(JSON.parse(streamText).error, 'not_ready');
       assert.equal(logs.some((line) => line.includes(sentinel) || line.includes('operator')), false);
     } finally {
       await closeServer(started);

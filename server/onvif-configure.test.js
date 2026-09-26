@@ -479,10 +479,13 @@ test('configure save persists non-secret fields and leaves the stream unavailabl
       assert.equal(JSON.parse(oneText).name, 'Gate');
       assertNoSecrets(oneText);
 
-      const streamText = await (await fetch(`${base}/api/cameras/${cameraId}/stream`)).text();
+      const streamRes = await fetch(`${base}/api/cameras/${cameraId}/stream`);
+      const streamText = await streamRes.text();
       const stream = JSON.parse(streamText);
-      assert.equal(stream.stream, null);
-      assert.equal(stream.delivery, 'unavailable');
+      assert.equal(streamRes.status, 409);
+      assert.equal(stream.ok, false);
+      assert.equal(stream.contract, 'onvif.stream.v0');
+      assert.equal(stream.error, 'not_ready');
       assertNoSecrets(streamText);
 
       const kept = await fetch(`${base}/api/cameras/${cameraId}/configure`, {

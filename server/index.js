@@ -8,6 +8,7 @@ import { authContract, parseAuthenticateRequest, runAuthenticate } from './onvif
 import { configureContract, interrogateContract } from './onvif-interrogate.js';
 import { publicTestPayload, testContract } from './onvif-test.js';
 import { publicReviewPayload, publicSuccessPayload, reviewContract, successContract } from './onvif-review.js';
+import { firstFrameMs, publicStreamError, publicStreamPayload, startPull, writeMjpeg } from './onvif-stream.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultDbPath = process.env.VMS_DB_PATH || path.join(root, 'data', 'vms.sqlite');
@@ -20,11 +21,12 @@ export function startServer({
   discoverOptions = {},
   authOptions = {},
   interrogateOptions = {},
-  testOptions = {}
+  testOptions = {},
+  streamOptions = {}
 } = {}) {
   const store = createCameraStore(dbPath);
   const server = http.createServer((req, res) => {
-    dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions, testOptions).catch((err) => {
+    dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions, testOptions, streamOptions).catch((err) => {
       if (res.headersSent) return;
       const status = err.code === 'VALIDATION' ? 400 : err.code === 'LIMIT' ? 413 : 500;
       const error = err.code === 'VALIDATION'
@@ -51,7 +53,7 @@ export function startServer({
   });
 }
 
-async function dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions, testOptions) {
+async function dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions, testOptions, streamOptions) {
   const pathname = requestPath(req);
 
   if (req.method === 'GET' && pathname === '/api/cameras') {
@@ -112,18 +114,14 @@ async function dispatch(req, res, store, discoverOptions, authOptions, interroga
 
   const streamMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/stream$/);
   if (req.method === 'GET' && streamMatch) {
-    const camera = await store.get(decodeId(streamMatch[1]));
-    if (!camera) {
-      sendJson(res, 404, { ok: false, error: 'not_found' });
-      return;
-    }
-    sendJson(res, 200, {
-      ok: true,
-      cameraId: camera.id,
-      stream: null,
-      delivery: 'unavailable',
-      detail: 'Live video is not implemented in this unit.'
-    });
+    const outcome = await resolveLive(store, decodeId(streamMatch[1]), streamOptions);
+    sendStream(res, outcome);
+    return;
+  }
+
+  const liveMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/live$/);
+  if (req.method === 'GET' && liveMatch) {
+    await serveLive(req, res, store, decodeId(liveMatch[1]), streamOptions);
     return;
   }
 
@@ -209,6 +207,71 @@ async function dispatch(req, res, store, discoverOptions, authOptions, interroga
   }
 
   sendJson(res, 404, { ok: false, error: 'not_found' });
+}
+
+async function resolveLive(store, id, streamOptions) {
+  try {
+    return await store.openLive(id, streamOptions);
+  } catch {
+    return { error: 'unreachable' };
+  }
+}
+
+function sendStream(res, outcome) {
+  if (!outcome || outcome.error || !outcome.cameraId || !outcome.profileId) {
+    const payload = publicStreamError(outcome && outcome.error);
+    sendJson(res, payload.status, payload.body);
+    return;
+  }
+  sendJson(res, 200, publicStreamPayload(outcome.cameraId, outcome.profileId));
+}
+
+async function serveLive(req, res, store, id, streamOptions) {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  req.on('close', stop);
+  res.on('close', stop);
+  let outcome;
+  try {
+    outcome = await resolveLive(store, id, streamOptions);
+  } catch {
+    outcome = { error: 'unreachable' };
+  }
+  if (!outcome || outcome.error || !outcome.source) {
+    if (res.headersSent || res.writableEnded) return;
+    const payload = publicStreamError(outcome && outcome.error ? outcome.error : 'unreachable');
+    sendJson(res, payload.status, payload.body);
+    return;
+  }
+  const timer = setTimeout(stop, firstFrameMs());
+  try {
+    const frames = watchFirstFrame(await startPull(outcome.source, {
+      username: outcome.username,
+      password: outcome.password,
+      cameraId: outcome.cameraId,
+      profileId: outcome.profileId,
+      signal: controller.signal,
+      frameSource: streamOptions.frameSource,
+      ffmpegPath: streamOptions.ffmpegPath
+    }), () => clearTimeout(timer));
+    await writeMjpeg(res, frames, controller.signal);
+  } catch {
+    clearTimeout(timer);
+    if (res.headersSent || res.writableEnded) return;
+    const payload = publicStreamError('stream_unavailable');
+    sendJson(res, payload.status, payload.body);
+  }
+}
+
+async function* watchFirstFrame(frames, onFirst) {
+  let seen = false;
+  for await (const frame of frames) {
+    if (!seen) {
+      seen = true;
+      onFirst();
+    }
+    yield frame;
+  }
 }
 
 function configureFields(body) {

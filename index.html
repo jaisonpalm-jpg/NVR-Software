@@ -15,7 +15,7 @@
       --muted: #95a2b5;
       --faint: #5e6b7e;
       --green: #29d17d;
-      --blue: #4c9dff;
+      --blue: #2f6bff;
       --orange: #ffb84d;
       --red: #ff6170;
       --purple: #9b7cff;
@@ -30,9 +30,8 @@ body {
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background:
-    radial-gradient(circle at 15% -10%, rgba(76,157,255,.20), transparent 34%),
-    radial-gradient(circle at 88% 2%, rgba(41,209,125,.13), transparent 32%),
-    linear-gradient(180deg, #060911, #03050a 72%);
+    radial-gradient(circle at 12% -8%, rgba(47,107,255,.18), transparent 32%),
+    linear-gradient(180deg, #151c27, #10161f 72%);
 }
 
 button, input, select { font: inherit; }
@@ -64,9 +63,9 @@ button:disabled { opacity: .6; cursor: default; }
 .brand-mark {
   width: 44px; height: 44px; border-radius: 15px;
   display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--green), var(--blue));
-  color: #041018; font-weight: 950; letter-spacing: -.08em;
-  box-shadow: 0 15px 40px rgba(41,209,125,.18);
+  background: linear-gradient(135deg, #2f6bff, #6aa2ff);
+  color: #f7f9ff; font-weight: 950; letter-spacing: -.08em;
+  box-shadow: 0 15px 40px rgba(47,107,255,.28);
 }
 .brand-title { font-weight: 950; letter-spacing: -.045em; line-height: 1; }
 .brand-sub { color: var(--muted); font-size: 12px; margin-top: 5px; }
@@ -93,7 +92,7 @@ button:disabled { opacity: .6; cursor: default; }
   transition: .16s ease;
 }
 .nav-btn.active, .nav-btn:hover { background: rgba(255,255,255,.09); color: var(--text); }
-.nav-btn.active { background: var(--green); color: #03100a; }
+.nav-btn.active { background: #2f6bff; color: #f7f9ff; }
 
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .btn, .icon-btn {
@@ -173,25 +172,92 @@ button:disabled { opacity: .6; cursor: default; }
 
 .layout-select { display: flex; gap: 5px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,.055); border: 1px solid var(--line); }
 .layout-select button { padding: 8px 10px; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 950; font-size: 12px; }
-.layout-select button.active { background: var(--green); color: #041018; }
+.layout-select button.active { background: #2f6bff; color: #f7f9ff; }
 
 .camera-wall {
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(180px, 1fr);
+  align-content: start;
   gap: 10px;
 }
+.camera-wall[data-density="1"] { grid-template-columns: minmax(0, 1fr); }
+.camera-wall[data-density="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.camera-wall[data-density="9"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .feed {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.10);
-  background:
-    radial-gradient(circle at 30% 20%, rgba(76,157,255,.17), transparent 24%),
-    linear-gradient(145deg, #0b111a, #151e2b);
-  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+  border-radius: 10px;
+  border: 1px solid rgba(140,170,210,.16);
+  background: #141b27;
+  box-shadow: 0 10px 28px rgba(0,0,0,.28);
+}
+#live .site-rail,
+#live .grid-toolbar,
+#live .dock-card,
+#live .site-card { border-radius: 10px; }
+#live .site-card {
+  width: 100%;
+  display: block;
+  text-align: left;
+  color: inherit;
+}
+#live .site-card.active { background: rgba(47,107,255,.16); border-color: rgba(47,107,255,.45); }
+#live .live-stage {
+  position: absolute;
+  inset: 0;
+  background: #10161f;
+}
+#live .live-frame {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #10161f;
+}
+#live .live-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 52px 16px 16px;
+  text-align: center;
+  color: #9aabbf;
+  font-size: 13px;
+  font-weight: 650;
+}
+#live .live-tile.is-live .live-state { display: none; }
+#live .live-badge {
+  color: #d7e6ff;
+  background: rgba(47,107,255,.18);
+  border: 1px solid rgba(47,107,255,.45);
+}
+#live .live-tile.is-live .live-badge {
+  color: #ffd0d6;
+  background: rgba(255,80,96,.16);
+  border: 1px solid rgba(255,97,112,.45);
+}
+#live .live-tile.is-error .live-badge {
+  color: #ffd0d6;
+  background: rgba(255,80,96,.12);
+  border: 1px solid rgba(255,97,112,.35);
+}
+#live .feed-top { text-shadow: 0 1px 2px rgba(0,0,0,.75); }
+#live .feed-name { font-size: 13px; font-weight: 700; }
+#live .live-empty {
+  grid-column: 1 / -1;
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+  border-radius: 10px;
+  border: 1px solid rgba(140,170,210,.16);
+  background: #141b27;
+  color: #9aabbf;
+  font-size: 13px;
 }
 .feed.hero { grid-column: span 2; grid-row: span 2; }
 .feed.motion { border-color: rgba(255,184,77,.55); box-shadow: 0 0 0 1px rgba(255,184,77,.12), 0 22px 60px rgba(0,0,0,.4); }
@@ -201,6 +267,7 @@ button:disabled { opacity: .6; cursor: default; }
   background-image: linear-gradient(rgba(255,255,255,.034) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.034) 1px, transparent 1px);
   background-size: 44px 44px; opacity: .32;
 }
+#live .feed::before { display: none; }
 .scene {
   position: absolute; inset: 54px 24px 54px;
   border-radius: 16px; border: 1px solid rgba(255,255,255,.07);
@@ -270,7 +337,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   .nav { justify-self: stretch; }
   .top-actions { justify-content: flex-end; }
   .live-layout { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
-  .camera-wall { min-height: 760px; }
+  .camera-wall { min-height: 240px; }
   .bottom-dock { grid-template-columns: 1fr; }
   .page-grid { grid-template-columns: 1fr; }
 }
@@ -324,47 +391,32 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
             <div class="section-sub">Groups & cameras</div>
           </div>
         </div>
-        <div class="site-list">
-          <div class="site-card active"><div class="site-title">Main Warehouse</div><div class="site-meta">8 cameras · 6 recording · 2 events</div></div>
-          <div class="site-card"><div class="site-title">Truck Yard</div><div class="site-meta">5 cameras · 5 online</div></div>
-          <div class="site-card"><div class="site-title">Office</div><div class="site-meta">4 cameras · 1 offline</div></div>
-          <div class="site-card"><div class="site-title">Dock Doors</div><div class="site-meta">6 cameras · motion priority</div></div>
-        </div>
+        <div class="site-list" id="live-sites"></div>
       </aside>
 
       <section class="grid-wrap">
         <div class="grid-toolbar">
           <div>
-            <div class="grid-title">Main Warehouse Live Wall</div>
-            <div class="section-sub">Camera-first monitoring with event-aware priority</div>
+            <div class="grid-title">Live View</div>
+            <div class="section-sub">Ready cameras. Frames come from this server.</div>
           </div>
           <div class="grid-tools">
-            <span class="pill green"><span class="dot"></span>6 Recording</span>
-            <span class="pill orange"><span class="dot"></span>Motion</span>
-            <div class="layout-select"><button>1</button><button class="active">8</button><button>12</button><button>16</button></div>
+            <span class="pill blue" id="live-pill"><span class="dot"></span>Live</span>
+            <div class="layout-select" id="live-layout">
+              <button type="button" data-density="1">1</button>
+              <button type="button" data-density="4">4</button>
+              <button type="button" class="active" data-density="9">9</button>
+            </div>
           </div>
         </div>
 
-        <div class="camera-wall">
-          <article class="feed hero">
-            <div class="feed-top"><div><div class="feed-name">Front Lot Main</div><div class="feed-meta">192.168.1.42 · 1080p · Main stream</div></div><span class="pill green"><span class="dot"></span>REC</span></div>
-            <div class="scene">CAM 01</div>
-            <div class="feed-bottom"><span class="pill blue">18 FPS · H.264</span><div class="feed-actions"><button class="feed-action">⛶</button><button class="feed-action">◉</button><button class="feed-action">PTZ</button></div></div>
-          </article>
-          <article class="feed motion"><div class="feed-top"><div><div class="feed-name">Loading Dock</div><div class="feed-meta">4MP · H.265</div></div><span class="pill orange">Motion</span></div><div class="scene">02</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button><button class="feed-action">◉</button></div></div></article>
-          <article class="feed"><div class="feed-top"><div><div class="feed-name">Rear Yard PTZ</div><div class="feed-meta">PTZ · 1440p</div></div><span class="pill green">REC</span></div><div class="scene">03</div><div class="feed-bottom"><span class="pill blue">Profile T</span><div class="feed-actions"><button class="feed-action">⛶</button><button class="feed-action">PTZ</button></div></div></article>
-          <article class="feed"><div class="feed-top"><div><div class="feed-name">Gate Entry</div><div class="feed-meta">1080p · H.264</div></div><span class="pill green">REC</span></div><div class="scene">04</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
-          <article class="feed offline"><div class="feed-top"><div><div class="feed-name">Office Hall</div><div class="feed-meta">Connection lost</div></div><span class="pill red">Offline</span></div><div class="scene">OFF</div><div class="feed-bottom"><span class="pill red">No Signal</span><div class="feed-actions"><button class="feed-action">↻</button></div></div></article>
-          <article class="feed"><div class="feed-top"><div><div class="feed-name">Warehouse Aisle</div><div class="feed-meta">Substream preview</div></div><span class="pill green">REC</span></div><div class="scene">06</div><div class="feed-bottom"><span class="pill blue">720p</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
-          <article class="feed"><div class="feed-top"><div><div class="feed-name">Side Door</div><div class="feed-meta">Profile S</div></div><span class="pill green">REC</span></div><div class="scene">07</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
-          <article class="feed"><div class="feed-top"><div><div class="feed-name">Parking Rear</div><div class="feed-meta">Profile T</div></div><span class="pill green">REC</span></div><div class="scene">08</div><div class="feed-bottom"><span class="pill blue">Live</span><div class="feed-actions"><button class="feed-action">⛶</button></div></div></article>
-        </div>
+        <div class="camera-wall" id="camera-wall" data-density="9"></div>
       </section>
 
       <footer class="bottom-dock">
-        <div class="dock-card"><div class="dock-title">Latest Event</div><div class="dock-line"><span class="pill orange">Motion</span> Loading Dock detected movement at 2:41 PM</div></div>
-        <div class="dock-card"><div class="dock-title">Mini Timeline</div><div class="dock-line">Front Lot Main · Today · Recording and motion markers</div><div class="timeline"><div class="rec" style="left:4%;width:28%"></div><div class="motion" style="left:38%;width:8%"></div><div class="rec" style="left:51%;width:35%"></div><div class="marker" style="left:42%"></div></div></div>
-        <div class="dock-card"><div class="dock-title">Storage</div><div class="dock-line">4.2 TB used · 18 day retention</div><div class="storage-bar"><div class="storage-fill"></div></div></div>
+        <div class="dock-card"><div class="dock-title">Live</div><div class="dock-line" id="live-count">No ready cameras</div></div>
+        <div class="dock-card"><div class="dock-title">Playback</div><div class="dock-line">Timeline playback is not part of Live View.</div></div>
+        <div class="dock-card"><div class="dock-title">Storage</div><div class="dock-line">Retention is not measured in Live View.</div></div>
       </footer>
     </div>
   </main>
@@ -614,6 +666,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       page.classList.toggle('active', page.id === pageId);
     });
     if (pageId === 'cameras') loadCameras();
+    if (pageId === 'live') loadLive();
     window.scrollTo(0, 0);
   }
 
@@ -1441,7 +1494,205 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
     }
   });
 
+  let liveSite = '';
+  let liveToken = 0;
+  const liveDensity = { value: '9' };
+
+  document.getElementById('live-layout').addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button || !button.dataset.density) return;
+    liveDensity.value = button.dataset.density;
+    document.querySelectorAll('#live-layout button').forEach((item) => {
+      item.classList.toggle('active', item === button);
+    });
+    const wall = document.getElementById('camera-wall');
+    if (wall) wall.dataset.density = liveDensity.value;
+  });
+
+  function livePathFor(id) {
+    return '/api/cameras/' + encodeURIComponent(id) + '/live';
+  }
+
+  function liveErrorText(code) {
+    if (code === 'missing_profile') return 'No profile is saved. Live view was not opened.';
+    if (code === 'not_authenticated') return 'This camera is not authenticated. Live view was not opened.';
+    if (code === 'not_ready') return 'This camera is not ready. Live view was not opened.';
+    if (code === 'auth_failed') return 'The camera rejected the stored login. Live view was not opened.';
+    if (code === 'not_found') return 'Camera not found.';
+    return 'The camera did not answer. Live view was not opened.';
+  }
+
+  function renderLiveSites(cameras) {
+    const list = document.getElementById('live-sites');
+    list.replaceChildren();
+    const counts = new Map();
+    cameras.forEach((camera) => {
+      const site = camera.site || 'Unassigned';
+      counts.set(site, (counts.get(site) || 0) + 1);
+    });
+    const sites = [''].concat(Array.from(counts.keys()));
+    sites.forEach((site) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'site-card' + (site === liveSite ? ' active' : '');
+      const title = document.createElement('div');
+      title.className = 'site-title';
+      title.textContent = site ? site : 'All sites';
+      const meta = document.createElement('div');
+      meta.className = 'site-meta';
+      const count = site ? counts.get(site) : cameras.length;
+      meta.textContent = count === 1 ? '1 ready camera' : count + ' ready cameras';
+      button.append(title, meta);
+      button.addEventListener('click', () => {
+        liveSite = site;
+        drawLive(cameras, liveToken);
+      });
+      list.append(button);
+    });
+  }
+
+  function drawLive(cameras, token) {
+    const wall = document.getElementById('camera-wall');
+    const visible = cameras.filter((camera) => !liveSite || camera.site === liveSite || (!camera.site && liveSite === 'Unassigned'));
+    wall.replaceChildren();
+    wall.dataset.density = liveDensity.value;
+    const count = document.getElementById('live-count');
+    count.textContent = cameras.length
+      ? cameras.length + (cameras.length === 1 ? ' ready camera' : ' ready cameras')
+      : 'No ready cameras';
+    renderLiveSites(cameras);
+    if (!visible.length) {
+      const empty = document.createElement('div');
+      empty.className = 'live-empty';
+      empty.textContent = cameras.length
+        ? 'No ready cameras at this site.'
+        : 'No ready cameras. Mark a camera ready on the Cameras page.';
+      wall.append(empty);
+      return;
+    }
+    visible.forEach((camera) => {
+      wall.append(buildLiveTile(camera, token));
+    });
+  }
+
+  function buildLiveTile(camera, token) {
+    const article = document.createElement('article');
+    article.className = 'feed live-tile';
+    const top = document.createElement('div');
+    top.className = 'feed-top';
+    const titles = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'feed-name';
+    name.textContent = camera.name || 'Camera';
+    const meta = document.createElement('div');
+    meta.className = 'feed-meta';
+    const place = [camera.site, camera.group].filter(Boolean).join(' · ');
+    meta.textContent = place || 'Ready';
+    titles.append(name, meta);
+    const badge = document.createElement('span');
+    badge.className = 'pill live-badge';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    const badgeText = document.createElement('span');
+    badgeText.textContent = 'Connecting';
+    badge.append(dot, badgeText);
+    top.append(titles, badge);
+    const stage = document.createElement('div');
+    stage.className = 'live-stage';
+    const state = document.createElement('div');
+    state.className = 'live-state';
+    state.textContent = 'Connecting';
+    const frame = document.createElement('img');
+    frame.className = 'live-frame';
+    frame.alt = '';
+    frame.referrerPolicy = 'no-referrer';
+    stage.append(frame, state);
+    article.append(top, stage);
+    const markLive = () => {
+      if (token !== liveToken) return;
+      article.classList.add('is-live');
+      article.classList.remove('is-error');
+      badgeText.textContent = 'LIVE';
+      state.textContent = '';
+    };
+    frame.addEventListener('load', markLive);
+    const watch = setInterval(() => {
+      if (token !== liveToken) {
+        clearInterval(watch);
+        return;
+      }
+      if (frame.naturalWidth > 0) {
+        clearInterval(watch);
+        markLive();
+      }
+    }, 200);
+    frame.addEventListener('error', () => {
+      if (token !== liveToken || !frame.getAttribute('src')) return;
+      clearInterval(watch);
+      article.classList.add('is-error');
+      article.classList.remove('is-live');
+      badgeText.textContent = 'Unavailable';
+      state.textContent = 'The camera did not answer. Live view was not opened.';
+    });
+    attachLive(camera, token, article, frame, badgeText, state);
+    return article;
+  }
+
+  async function attachLive(camera, token, article, frame, badgeText, state) {
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(camera.id) + '/stream', {
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer'
+      });
+      let body = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      if (token !== liveToken) return;
+      const path = body && typeof body.stream === 'string' ? body.stream : '';
+      if (response.ok && body && body.ok === true && path === livePathFor(camera.id)) {
+        frame.src = path;
+        return;
+      }
+      article.classList.add('is-error');
+      badgeText.textContent = 'Unavailable';
+      state.textContent = liveErrorText(body && body.error);
+    } catch {
+      if (token !== liveToken) return;
+      article.classList.add('is-error');
+      badgeText.textContent = 'Unavailable';
+      state.textContent = 'The camera did not answer. Live view was not opened.';
+    }
+  }
+
+  async function loadLive() {
+    const token = ++liveToken;
+    const wall = document.getElementById('camera-wall');
+    wall.replaceChildren();
+    try {
+      const response = await fetch('/api/cameras', { cache: 'no-store', referrerPolicy: 'no-referrer' });
+      if (!response.ok) throw new Error('unavailable');
+      const data = await response.json();
+      if (token !== liveToken) return;
+      const ready = Array.isArray(data)
+        ? data.map(publicCamera).filter((camera) => camera.status === 'ready' && camera.id)
+        : [];
+      if (liveSite && !ready.some((camera) => (camera.site || 'Unassigned') === liveSite)) liveSite = '';
+      drawLive(ready, token);
+    } catch {
+      if (token !== liveToken) return;
+      document.getElementById('live-count').textContent = 'Camera list unavailable';
+      const empty = document.createElement('div');
+      empty.className = 'live-empty';
+      empty.textContent = 'Start the VMS process and open this page from it.';
+      wall.append(empty);
+    }
+  }
+
   loadCameras();
+  loadLive();
 </script>
 </body>
 </html>
