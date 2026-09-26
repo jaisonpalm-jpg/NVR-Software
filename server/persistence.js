@@ -4,24 +4,27 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { parseAuthenticateRequest } from './onvif-auth.js';
 import { runInterrogate } from './onvif-interrogate.js';
+import { buildTestChecks, runDeviceProbe, testSummary } from './onvif-test.js';
 
 /**
  * Camera persistence port.
  *
  * SQLite is the local adapter. A later PostgreSQL adapter can implement the
  * same async methods (list, get, create, saveAuthenticated, interrogate,
- * saveConfigured, close) without changing camera routes.
+ * saveConfigured, runTest, close) without changing camera routes.
  *
  * Public rows are an allowlist: id, name, site, group, status, createdAt,
  * plus optional non-secret configure fields manufacturer, model, profileId,
- * and profileLabel. Device login is stored only in camera_credentials.
- * list, get, create, interrogate, and saveConfigured never return that table.
- * URL userinfo is stripped from text fields so a stream address cannot carry
- * a secret into the client.
+ * and profileLabel, plus optional lastTestAt and lastTestSummary. Device
+ * login is stored only in camera_credentials. list, get, create, interrogate,
+ * saveConfigured, and runTest never return that table. URL userinfo is
+ * stripped from text fields so a stream address cannot carry a secret into
+ * the client.
  */
 
 const PUBLIC_FIELDS = ['id', 'name', 'site', 'group', 'status', 'createdAt'];
 const OPTIONAL_PUBLIC_FIELDS = ['manufacturer', 'model', 'profileId', 'profileLabel'];
+const TEST_SUMMARIES = new Set(['passed', 'failed']);
 const MAX_TEXT = 120;
 
 export function publicCamera(row) {
@@ -36,7 +39,11 @@ export function publicCamera(row) {
   for (const key of OPTIONAL_PUBLIC_FIELDS) {
     if (typeof row[key] === 'string' && row[key]) camera[key] = row[key];
   }
-  const allowed = new Set([...PUBLIC_FIELDS, ...OPTIONAL_PUBLIC_FIELDS]);
+  if (TEST_SUMMARIES.has(row.lastTestSummary) && isoTimestamp(row.lastTestAt)) {
+    camera.lastTestSummary = row.lastTestSummary;
+    camera.lastTestAt = row.lastTestAt;
+  }
+  const allowed = new Set([...PUBLIC_FIELDS, ...OPTIONAL_PUBLIC_FIELDS, 'lastTestAt', 'lastTestSummary']);
   for (const key of Object.keys(camera)) {
     if (!allowed.has(key)) delete camera[key];
   }
@@ -86,6 +93,8 @@ export function createCameraStore(dbPath) {
   ensureColumn(db, 'model', 'TEXT');
   ensureColumn(db, 'profile_id', 'TEXT');
   ensureColumn(db, 'profile_label', 'TEXT');
+  ensureColumn(db, 'last_test_at', 'TEXT');
+  ensureColumn(db, 'last_test_summary', 'TEXT');
   try {
     fs.chmodSync(dbPath, 0o600);
   } catch {
@@ -94,13 +103,15 @@ export function createCameraStore(dbPath) {
 
   const listStmt = db.prepare(`
     SELECT id, name, site, group_name AS "group", status, created_at AS createdAt,
-      manufacturer, model, profile_id AS profileId, profile_label AS profileLabel
+      manufacturer, model, profile_id AS profileId, profile_label AS profileLabel,
+      last_test_at AS lastTestAt, last_test_summary AS lastTestSummary
     FROM cameras
     ORDER BY created_at ASC, id ASC
   `);
   const getStmt = db.prepare(`
     SELECT id, name, site, group_name AS "group", status, created_at AS createdAt,
-      manufacturer, model, profile_id AS profileId, profile_label AS profileLabel
+      manufacturer, model, profile_id AS profileId, profile_label AS profileLabel,
+      last_test_at AS lastTestAt, last_test_summary AS lastTestSummary
     FROM cameras
     WHERE id = ?
   `);
@@ -138,7 +149,8 @@ export function createCameraStore(dbPath) {
   `);
   const clearDetails = db.prepare(`
     UPDATE cameras
-    SET manufacturer = NULL, model = NULL, profile_id = NULL, profile_label = NULL
+    SET manufacturer = NULL, model = NULL, profile_id = NULL, profile_label = NULL,
+      last_test_at = NULL, last_test_summary = NULL
     WHERE id = ?
   `);
   const deleteSnapshot = db.prepare(`
@@ -164,6 +176,11 @@ export function createCameraStore(dbPath) {
     UPDATE cameras
     SET name = ?, site = ?, group_name = ?, status = 'configured',
       manufacturer = ?, model = ?, profile_id = ?, profile_label = ?
+    WHERE id = ?
+  `);
+  const markTested = db.prepare(`
+    UPDATE cameras
+    SET last_test_at = ?, last_test_summary = ?
     WHERE id = ?
   `);
 
@@ -295,6 +312,30 @@ export function createCameraStore(dbPath) {
       return { camera };
     },
 
+    async runTest(id, options = {}) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      const current = read(id);
+      if (!current) return { error: 'not_found' };
+      const creds = getCred.get(id);
+      if (!creds) return { error: 'not_authenticated' };
+      if (current.status !== 'configured') return { error: 'not_configured' };
+      const snapshot = readSnapshot(getSnapshot, id);
+      if (!snapshot) return { error: 'not_configured' };
+      const probe = await runDeviceProbe({
+        host: creds.host,
+        port: creds.port,
+        path: creds.path,
+        scheme: creds.scheme,
+        username: creds.username,
+        password: creds.password
+      }, options);
+      const checks = buildTestChecks(probe, snapshot);
+      const summary = testSummary(checks);
+      const checkedAt = new Date().toISOString();
+      markTested.run(checkedAt, summary, id);
+      return { cameraId: id, summary, checkedAt, checks };
+    },
+
     close() {
       db.close();
     }
@@ -358,6 +399,11 @@ function cleanText(value, field, optional = false) {
   }
   if (redacted.length > MAX_TEXT) invalid();
   return redacted;
+}
+
+function isoTimestamp(value) {
+  return typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value);
 }
 
 function redactUserinfo(value) {

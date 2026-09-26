@@ -155,9 +155,12 @@ test('camera routes stay sanitized and discover does not echo secrets', async ()
       body: JSON.stringify({ [secretKey]: sentinel })
     });
     const probeText = await probe.text();
-    assert.equal(probe.status, 200);
-    assert.equal(JSON.parse(probeText).implemented, false);
+    const probeBody = JSON.parse(probeText);
+    assert.equal(probe.status, 400);
+    assert.equal(probeBody.implemented, true);
+    assert.equal(probeBody.error, 'invalid_request');
     assert.equal(probeText.includes(sentinel), false);
+    assertForbiddenKeys(probeBody);
 
     const listed = await fetch(`${base}/api/cameras`);
     const listedBody = await listed.json();

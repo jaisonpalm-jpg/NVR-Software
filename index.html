@@ -407,7 +407,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
         <div class="section-head">
           <div>
             <div class="section-title">ONVIF</div>
-            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Configure reads the device with that login and saves name, site, and group. Test does not run checks.</div>
+            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Configure reads the device with that login and saves name, site, and group. Test checks that saved camera without opening a stream.</div>
           </div>
         </div>
         <div class="panel-body">
@@ -466,9 +466,16 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
             </div>
             <div class="card">
               <div class="card-title">Test</div>
-              <div class="card-sub">Network, ONVIF, streams, PTZ, audio, and events stay not run. This unit does not run the checks.</div>
-              <div class="control-row"><button class="btn" type="button" id="test-btn">Run test stub</button></div>
-              <div class="card-sub" id="test-result" aria-live="polite"></div>
+              <div class="card-sub">Uses the login stored on the server. Network, authentication, ONVIF, and saved device info are checked. Stream, audio, PTZ, and event checks are not run.</div>
+              <div class="field">
+                <label for="test-camera">Configured camera</label>
+                <select id="test-camera">
+                  <option value="">Select a configured camera</option>
+                </select>
+              </div>
+              <div class="control-row"><button class="btn" type="button" id="test-btn" disabled>Run test</button></div>
+              <div id="test-checks" aria-live="polite"></div>
+              <p class="card-sub" id="test-result" role="status"></p>
             </div>
           </div>
         </div>
@@ -568,6 +575,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   let selectedDevice = null;
   let cameraRecords = [];
   let selectedCameraId = '';
+  let selectedTestId = '';
   let profilesLoaded = false;
 
   function showPage(pageId) {
@@ -622,6 +630,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       text.append(title, sub);
       row.append(text);
       cameraList.append(row);
+      fillTestCameras(cameras);
       return;
     }
     cameras.forEach((camera) => {
@@ -636,7 +645,12 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       const place = [camera.site, camera.group].filter(Boolean).join(' · ');
       const device = [camera.manufacturer, camera.model].filter(Boolean).join(' ');
       const profile = camera.profileLabel ? 'Profile ' + camera.profileLabel : '';
-      sub.textContent = [place, device, profile].filter(Boolean).join(' · ') || 'No site';
+      const tested = camera.lastTestSummary === 'passed'
+        ? 'Last test passed'
+        : camera.lastTestSummary === 'failed'
+          ? 'Last test failed'
+          : '';
+      sub.textContent = [place, device, profile, tested].filter(Boolean).join(' · ') || 'No site';
       text.append(title, sub);
       const pill = document.createElement('span');
       pill.className = camera.status === 'configured' || camera.status === 'authenticated' ? 'pill green' : 'pill gray';
@@ -652,6 +666,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       }
       cameraList.append(row);
     });
+    fillTestCameras(cameras);
   }
 
   async function loadCameras() {
@@ -691,7 +706,36 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
     if (typeof camera.model === 'string' && camera.model) row.model = camera.model;
     if (typeof camera.profileLabel === 'string' && camera.profileLabel) row.profileLabel = camera.profileLabel;
     if (typeof camera.profileId === 'string' && camera.profileId) row.profileId = camera.profileId;
+    if (camera.lastTestSummary === 'passed' || camera.lastTestSummary === 'failed') {
+      row.lastTestSummary = camera.lastTestSummary;
+    }
+    if (typeof camera.lastTestAt === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(camera.lastTestAt)) {
+      row.lastTestAt = camera.lastTestAt;
+    }
     return row;
+  }
+
+  function fillTestCameras(cameras) {
+    const select = document.getElementById('test-camera');
+    const previous = selectedTestId;
+    select.replaceChildren();
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Select a configured camera';
+    select.append(empty);
+    cameras.filter((camera) => camera.status === 'configured' && camera.id).forEach((camera) => {
+      const option = document.createElement('option');
+      option.value = camera.id;
+      option.textContent = camera.name || 'Camera';
+      select.append(option);
+    });
+    if (previous && cameras.some((camera) => camera.id === previous && camera.status === 'configured')) {
+      select.value = previous;
+      selectedTestId = previous;
+    } else {
+      selectedTestId = '';
+    }
+    document.getElementById('test-btn').disabled = !selectedTestId;
   }
 
   addForm.addEventListener('submit', async (event) => {
@@ -719,22 +763,6 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       addError.textContent = 'Camera could not be saved.';
     }
   });
-
-  async function runStub(path, target, summary) {
-    target.textContent = 'Contacting stub…';
-    try {
-      const response = await fetch(path, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}'
-      });
-      if (!response.ok) throw new Error('stub failed');
-      const data = await response.json();
-      target.textContent = summary(data);
-    } catch {
-      target.textContent = 'Stub unavailable.';
-    }
-  }
 
   document.getElementById('discover-btn').addEventListener('click', () => {
     runDiscover();
@@ -1086,12 +1114,85 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
     }
   });
 
-  document.getElementById('test-btn').addEventListener('click', () => {
-    runStub('/api/onvif/test', document.getElementById('test-result'), (data) => {
-      const checks = Array.isArray(data.checks) ? data.checks.length : 0;
-      return checks + ' checks not run';
-    });
+  document.getElementById('test-camera').addEventListener('change', () => {
+    selectedTestId = document.getElementById('test-camera').value;
+    document.getElementById('test-btn').disabled = !selectedTestId;
+    document.getElementById('test-result').textContent = '';
+    document.getElementById('test-checks').replaceChildren();
   });
+
+  document.getElementById('test-btn').addEventListener('click', async () => {
+    const result = document.getElementById('test-result');
+    const checksEl = document.getElementById('test-checks');
+    const button = document.getElementById('test-btn');
+    if (!selectedTestId) {
+      result.textContent = 'Select a configured camera.';
+      return;
+    }
+    button.disabled = true;
+    result.textContent = 'Running checks…';
+    checksEl.replaceChildren();
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(selectedTestId) + '/test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        body: '{}'
+      });
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (data && Array.isArray(data.checks)) renderChecks(checksEl, data.checks);
+      if (data && data.summary === 'passed') {
+        result.textContent = 'Test passed. Stream checks were not run.';
+        loadCameras();
+      } else if (data && data.summary === 'failed') {
+        result.textContent = 'Test finished with failed checks. Stream checks were not run.';
+        loadCameras();
+      } else if (data && data.error === 'not_configured') {
+        result.textContent = 'Configure the camera before running Test.';
+      } else if (data && data.error === 'not_authenticated') {
+        result.textContent = 'This camera has no stored login.';
+      } else if (data && data.error === 'not_found') {
+        result.textContent = 'Camera not found.';
+      } else {
+        result.textContent = 'Test could not be run.';
+      }
+    } catch {
+      result.textContent = 'Test unavailable.';
+    } finally {
+      button.disabled = !selectedTestId;
+    }
+  });
+
+  function renderChecks(target, checks) {
+    const labels = {
+      network: 'Network',
+      authentication: 'Authentication',
+      onvif: 'ONVIF',
+      deviceInfo: 'Device info',
+      mainStream: 'Main stream',
+      substream: 'Substream',
+      ptz: 'PTZ',
+      audio: 'Audio',
+      events: 'Events'
+    };
+    const statuses = { pass: 'pass', fail: 'fail', skipped: 'skipped' };
+    target.replaceChildren();
+    checks.forEach((item) => {
+      if (!item || typeof item.name !== 'string' || !labels[item.name]) return;
+      const status = statuses[item.status];
+      if (!status) return;
+      const line = document.createElement('p');
+      line.className = 'card-sub';
+      line.textContent = labels[item.name] + ': ' + status + (status === 'skipped' ? ' (not implemented)' : '');
+      target.append(line);
+    });
+  }
 
   loadCameras();
 </script>

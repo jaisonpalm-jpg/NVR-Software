@@ -335,7 +335,11 @@ test('successful auth marks the camera and keeps secrets on the server', async (
         headers: { 'content-type': 'application/json' },
         body: '{}'
       });
-      assert.equal((await probe.json()).implemented, false);
+      const probeBody = await probe.json();
+      assert.equal(probe.status, 400);
+      assert.equal(probeBody.implemented, true);
+      assert.equal(probeBody.error, 'invalid_request');
+      assertForbiddenKeys(probeBody);
 
       assert.equal(soap.includes('GetDeviceInformation'), true);
       assert.equal(soap.includes(sentinel), false);

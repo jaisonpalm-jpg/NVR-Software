@@ -6,26 +6,11 @@ import { createCameraStore } from './persistence.js';
 import { discoverOnvif, parseDiscoverRequest, toDiscoverResponse } from './onvif-discover.js';
 import { authContract, parseAuthenticateRequest, runAuthenticate } from './onvif-auth.js';
 import { configureContract, interrogateContract } from './onvif-interrogate.js';
+import { publicTestPayload, testContract } from './onvif-test.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultDbPath = process.env.VMS_DB_PATH || path.join(root, 'data', 'vms.sqlite');
 const MAX_BODY = 64 * 1024;
-
-const TEST_STUB = Object.freeze({
-  ok: true,
-  contract: 'onvif.test.v0',
-  implemented: false,
-  checks: Object.freeze([
-    Object.freeze({ name: 'network', status: 'not_run' }),
-    Object.freeze({ name: 'authentication', status: 'not_run' }),
-    Object.freeze({ name: 'onvif', status: 'not_run' }),
-    Object.freeze({ name: 'mainStream', status: 'not_run' }),
-    Object.freeze({ name: 'substream', status: 'not_run' }),
-    Object.freeze({ name: 'ptz', status: 'not_run' }),
-    Object.freeze({ name: 'audio', status: 'not_run' }),
-    Object.freeze({ name: 'events', status: 'not_run' })
-  ])
-});
 
 export function startServer({
   port = Number(process.env.PORT || 8787),
@@ -33,11 +18,12 @@ export function startServer({
   dbPath = defaultDbPath,
   discoverOptions = {},
   authOptions = {},
-  interrogateOptions = {}
+  interrogateOptions = {},
+  testOptions = {}
 } = {}) {
   const store = createCameraStore(dbPath);
   const server = http.createServer((req, res) => {
-    dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions).catch((err) => {
+    dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions, testOptions).catch((err) => {
       if (res.headersSent) return;
       const status = err.code === 'VALIDATION' ? 400 : err.code === 'LIMIT' ? 413 : 500;
       const error = err.code === 'VALIDATION'
@@ -64,7 +50,7 @@ export function startServer({
   });
 }
 
-async function dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions) {
+async function dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions, testOptions) {
   const pathname = requestPath(req);
 
   if (req.method === 'GET' && pathname === '/api/cameras') {
@@ -87,6 +73,15 @@ async function dispatch(req, res, store, discoverOptions, authOptions, interroga
     const id = decodeId(configureMatch[1]);
     const outcome = await store.saveConfigured(id, configureFields(body));
     sendConfigure(res, outcome);
+    return;
+  }
+
+  const testMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/test$/);
+  if (req.method === 'POST' && testMatch) {
+    await readBody(req);
+    const id = decodeId(testMatch[1]);
+    const outcome = await store.runTest(id, testOptions);
+    sendTest(res, outcome);
     return;
   }
 
@@ -162,8 +157,19 @@ async function dispatch(req, res, store, discoverOptions, authOptions, interroga
   }
 
   if (req.method === 'POST' && pathname === '/api/onvif/test') {
-    await readBody(req);
-    sendJson(res, 200, TEST_STUB);
+    const body = await readBody(req);
+    const cameraId = typeof body.cameraId === 'string' ? body.cameraId.trim() : '';
+    if (!cameraId || cameraId.length > 80) {
+      sendJson(res, 400, {
+        ok: false,
+        contract: testContract(),
+        implemented: true,
+        error: 'invalid_request'
+      });
+      return;
+    }
+    const outcome = await store.runTest(cameraId, testOptions);
+    sendTest(res, outcome);
     return;
   }
 
@@ -221,6 +227,11 @@ function sendInterrogate(res, id, outcome) {
   if (info.model) payload.model = info.model;
   if (info.firmware) payload.firmware = info.firmware;
   sendJson(res, 200, payload);
+}
+
+function sendTest(res, outcome) {
+  const payload = publicTestPayload(outcome);
+  sendJson(res, payload.status, payload.body);
 }
 
 function sendConfigure(res, outcome) {

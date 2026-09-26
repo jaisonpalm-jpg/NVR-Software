@@ -1,6 +1,6 @@
 # Vision NVR
 
-WS1-U3 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, and configures that camera from non-secret device information. This unit does not open streams or play video.
+WS1-U4 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, configures that camera from non-secret device information, and runs non-media test checks with the stored login. This unit does not open streams or play video.
 
 ## Run locally
 
@@ -59,7 +59,7 @@ The process must be allowed to send and receive UDP on the LAN interface. Replie
 
 This cloud agent VM has no route to a camera LAN. The probe still runs. With no answers it returns `devices: []`.
 
-IPv6 discovery is a later unit. Authentication and configure call the ONVIF device service, and configure also calls GetProfiles on a same-host media service when the device advertises one. This unit does not resolve an RTSP URI, start WebRTC, or start a media server such as MediaMTX or go2rtc.
+IPv6 discovery is a later unit. Authentication, configure, and test call the ONVIF device service. Configure also calls GetProfiles on a same-host media service when the device advertises one. Test does not. This unit does not resolve an RTSP URI, start WebRTC, or start a media server such as MediaMTX or go2rtc.
 
 ## Authenticate a discovered device
 
@@ -104,6 +104,59 @@ The Cameras page **Configure** card lists authenticated cameras, reads the devic
 
 This cloud VM has no route to a camera LAN, so a physical device was not interrogated here. The default client is still the device and media capability calls. Tests inject `interrogateOptions.client` or `interrogateOptions.fetchImpl`. A call to a non-routable address returns `unreachable`. No RTSP URI is resolved, and WebRTC, MediaMTX, and go2rtc are not started.
 
+## Test a configured camera
+
+Test runs after Configure. It uses the login already stored in `camera_credentials` and the device snapshot from interrogation. The operator does not type the username or password again. A request body cannot replace that login.
+
+`POST /api/cameras/:id/test` (and `POST /api/onvif/test` with `{ "cameraId": "<id>" }`) is for a camera whose status is `configured`.
+
+Real checks, with no media:
+
+| Check | What it does |
+| --- | --- |
+| `network` | TCP connect to the stored host and ONVIF port. `pass` or `fail` (`unreachable`). |
+| `authentication` | `GetDeviceInformation` with the stored login. `pass`, or `fail` with `auth_failed` when the device answers and rejects the login. |
+| `onvif` | The device service answered that call. `pass` on a device-information response or an authentication fault. `fail` when the service does not answer. |
+| `deviceInfo` | Saved manufacturer, model, or profile from the prior interrogation. `pass` when at least one is present. `fail` with `no_device_info` when none are. |
+
+Deferred checks stay `skipped` with reason `not_implemented`: `mainStream`, `substream`, `ptz`, `audio`, and `events`. Test does not call `GetStreamUri`, `GetProfiles`, or `GetCapabilities`, and it does not open RTSP or WebRTC.
+
+A finished run returns HTTP 200. `summary` is `passed` when every real check passed, otherwise `failed`. `ok` follows that summary. The server stores only `lastTestAt` and `lastTestSummary` (`passed` or `failed`). Public GETs may include those two fields. They still omit the login, firmware, and any stream URL. Signing in again clears the test summary with the other saved device fields.
+
+A camera that is not configured returns `not_configured` (HTTP 409). A camera with no stored login returns `not_authenticated`. An unknown id returns `not_found`. Those errors do not include the request body. `GET /api/cameras/:id/stream` stays `{ "stream": null, "delivery": "unavailable" }`.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/test \
+  -H 'content-type: application/json' \
+  -d '{}'
+```
+
+```json
+{
+  "ok": true,
+  "contract": "onvif.test.v0",
+  "implemented": true,
+  "cameraId": "<id>",
+  "summary": "passed",
+  "checkedAt": "2026-09-26T00:00:00.000Z",
+  "checks": [
+    { "name": "network", "status": "pass" },
+    { "name": "authentication", "status": "pass" },
+    { "name": "onvif", "status": "pass" },
+    { "name": "deviceInfo", "status": "pass" },
+    { "name": "mainStream", "status": "skipped", "reason": "not_implemented" },
+    { "name": "substream", "status": "skipped", "reason": "not_implemented" },
+    { "name": "ptz", "status": "skipped", "reason": "not_implemented" },
+    { "name": "audio", "status": "skipped", "reason": "not_implemented" },
+    { "name": "events", "status": "skipped", "reason": "not_implemented" }
+  ]
+}
+```
+
+The Cameras page **Test** card lists configured cameras and runs this call. It has no password field. Check lines are fixed labels. The page does not print the raw response.
+
+This cloud VM has no route to a camera LAN, so a physical device was not tested here. The default client is still the TCP connect plus `GetDeviceInformation`. Tests inject `testOptions.client`, `testOptions.connectImpl`, or `testOptions.fetchImpl`. A non-routable address fails `network` and does not open a stream.
+
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
   -H 'content-type: application/json' \
@@ -122,20 +175,21 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
 | `POST` | `/api/onvif/authenticate` | Device-service login. Stores credentials only in SQLite. Response has no username or password. |
 | `POST` | `/api/cameras/:id/interrogate` | Reads device info and profiles with the stored login. Response has no username, password, or stream URL. |
 | `POST` | `/api/cameras/:id/configure` | Saves name, site, group, and an optional profile id. Status becomes `configured`. |
-| `POST` | `/api/onvif/test` | Checks reported as `not_run`. |
+| `POST` | `/api/cameras/:id/test` | Non-media checks for a configured camera, using the stored login. Media checks are `skipped`. |
+| `POST` | `/api/onvif/test` | Same test. Body is `{ "cameraId": "<id>" }`. Other fields are ignored. |
 
 Example:
 
 ```bash
 curl -sS http://127.0.0.1:8787/api/cameras
 curl -sS -X POST http://127.0.0.1:8787/api/onvif/discover -H 'content-type: application/json' -d '{}'
-curl -sS -X POST http://127.0.0.1:8787/api/onvif/test -H 'content-type: application/json' -d '{}'
+curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/test -H 'content-type: application/json' -d '{}'
 ```
 
 Saved cameras from `POST /api/cameras` accept a display name, site, and group only. That route drops every other field, including a password. Text that contains URL userinfo is stored without that userinfo. Responses never include a stream URL. A password is stored only by the authenticate route, and only in `camera_credentials`.
 
-`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, and that secret-bearing fields are not logged or returned.
+`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, non-media test checks with an injected device client, and that secret-bearing fields are not logged or returned.
 
 ## UI scope
 
-Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles are the existing visual placeholders. Playback, Storage, and Settings are shells. Camera records added in the UI show under Cameras; they do not start video. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. It does not ask for the password again and it does not open a stream.
+Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles are the existing visual placeholders. Playback, Storage, and Settings are shells. Camera records added in the UI show under Cameras; they do not start video. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. Test runs network, authentication, ONVIF, and saved device-info checks for a configured camera. Stream checks stay skipped. Configure and Test do not ask for the password again and they do not open a stream.

@@ -501,7 +501,13 @@ test('configure save persists non-secret fields and leaves the stream unavailabl
         headers: { 'content-type': 'application/json' },
         body: '{}'
       });
-      assert.equal((await probe.json()).implemented, false);
+      const probeText = await probe.text();
+      const probeBody = JSON.parse(probeText);
+      assert.equal(probe.status, 400);
+      assert.equal(probeBody.implemented, true);
+      assert.equal(probeBody.error, 'invalid_request');
+      assertNoSecrets(probeText);
+      assertForbiddenKeys(probeBody);
 
       const again = await fetch(`${base}/api/onvif/authenticate`, {
         method: 'POST',
