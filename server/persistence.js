@@ -3,21 +3,25 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { parseAuthenticateRequest } from './onvif-auth.js';
+import { runInterrogate } from './onvif-interrogate.js';
 
 /**
  * Camera persistence port.
  *
  * SQLite is the local adapter. A later PostgreSQL adapter can implement the
- * same async methods (list, get, create, saveAuthenticated, close) without
- * changing camera routes.
+ * same async methods (list, get, create, saveAuthenticated, interrogate,
+ * saveConfigured, close) without changing camera routes.
  *
- * Public rows are an allowlist: id, name, site, group, status, createdAt.
- * Device login is stored only in camera_credentials. list, get, and create
- * never read that table. URL userinfo is stripped from text fields so a
- * stream address cannot carry a secret into the client.
+ * Public rows are an allowlist: id, name, site, group, status, createdAt,
+ * plus optional non-secret configure fields manufacturer, model, profileId,
+ * and profileLabel. Device login is stored only in camera_credentials.
+ * list, get, create, interrogate, and saveConfigured never return that table.
+ * URL userinfo is stripped from text fields so a stream address cannot carry
+ * a secret into the client.
  */
 
 const PUBLIC_FIELDS = ['id', 'name', 'site', 'group', 'status', 'createdAt'];
+const OPTIONAL_PUBLIC_FIELDS = ['manufacturer', 'model', 'profileId', 'profileLabel'];
 const MAX_TEXT = 120;
 
 export function publicCamera(row) {
@@ -29,8 +33,12 @@ export function publicCamera(row) {
     status: row.status,
     createdAt: row.createdAt
   };
+  for (const key of OPTIONAL_PUBLIC_FIELDS) {
+    if (typeof row[key] === 'string' && row[key]) camera[key] = row[key];
+  }
+  const allowed = new Set([...PUBLIC_FIELDS, ...OPTIONAL_PUBLIC_FIELDS]);
   for (const key of Object.keys(camera)) {
-    if (!PUBLIC_FIELDS.includes(key)) delete camera[key];
+    if (!allowed.has(key)) delete camera[key];
   }
   return camera;
 }
@@ -65,7 +73,19 @@ export function createCameraStore(dbPath) {
       updated_at TEXT NOT NULL,
       UNIQUE (host, onvif_port)
     );
+    CREATE TABLE IF NOT EXISTS camera_device_info (
+      camera_id TEXT PRIMARY KEY REFERENCES cameras(id) ON DELETE CASCADE,
+      manufacturer TEXT,
+      model TEXT,
+      firmware TEXT,
+      profiles_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+  ensureColumn(db, 'manufacturer', 'TEXT');
+  ensureColumn(db, 'model', 'TEXT');
+  ensureColumn(db, 'profile_id', 'TEXT');
+  ensureColumn(db, 'profile_label', 'TEXT');
   try {
     fs.chmodSync(dbPath, 0o600);
   } catch {
@@ -73,12 +93,14 @@ export function createCameraStore(dbPath) {
   }
 
   const listStmt = db.prepare(`
-    SELECT id, name, site, group_name AS "group", status, created_at AS createdAt
+    SELECT id, name, site, group_name AS "group", status, created_at AS createdAt,
+      manufacturer, model, profile_id AS profileId, profile_label AS profileLabel
     FROM cameras
     ORDER BY created_at ASC, id ASC
   `);
   const getStmt = db.prepare(`
-    SELECT id, name, site, group_name AS "group", status, created_at AS createdAt
+    SELECT id, name, site, group_name AS "group", status, created_at AS createdAt,
+      manufacturer, model, profile_id AS profileId, profile_label AS profileLabel
     FROM cameras
     WHERE id = ?
   `);
@@ -108,6 +130,41 @@ export function createCameraStore(dbPath) {
   `);
   const renameCamera = db.prepare(`
     UPDATE cameras SET name = ? WHERE id = ?
+  `);
+  const getCred = db.prepare(`
+    SELECT host, onvif_port AS port, device_path AS path, scheme, username, password
+    FROM camera_credentials
+    WHERE camera_id = ?
+  `);
+  const clearDetails = db.prepare(`
+    UPDATE cameras
+    SET manufacturer = NULL, model = NULL, profile_id = NULL, profile_label = NULL
+    WHERE id = ?
+  `);
+  const deleteSnapshot = db.prepare(`
+    DELETE FROM camera_device_info WHERE camera_id = ?
+  `);
+  const upsertSnapshot = db.prepare(`
+    INSERT INTO camera_device_info (
+      camera_id, manufacturer, model, firmware, profiles_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(camera_id) DO UPDATE SET
+      manufacturer = excluded.manufacturer,
+      model = excluded.model,
+      firmware = excluded.firmware,
+      profiles_json = excluded.profiles_json,
+      updated_at = excluded.updated_at
+  `);
+  const getSnapshot = db.prepare(`
+    SELECT manufacturer, model, firmware, profiles_json
+    FROM camera_device_info
+    WHERE camera_id = ?
+  `);
+  const updateConfigured = db.prepare(`
+    UPDATE cameras
+    SET name = ?, site = ?, group_name = ?, status = 'configured',
+      manufacturer = ?, model = ?, profile_id = ?, profile_label = ?
+    WHERE id = ?
   `);
 
   function read(id) {
@@ -146,6 +203,8 @@ export function createCameraStore(dbPath) {
           updateCred.run(parsed.path, parsed.scheme, parsed.username, parsed.password, now, id);
           if (parsed.name) renameCamera.run(parsed.name, id);
           markAuthenticated.run(id);
+          clearDetails.run(id);
+          deleteSnapshot.run(id);
         } else {
           insertAuthed.run(id, name, now);
           insertCred.run(id, parsed.host, parsed.port, parsed.path, parsed.scheme, parsed.username, parsed.password, now);
@@ -160,9 +219,114 @@ export function createCameraStore(dbPath) {
       return camera;
     },
 
+    async interrogate(id, options = {}) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      if (!read(id)) return { error: 'not_found' };
+      const creds = getCred.get(id);
+      if (!creds) return { error: 'not_authenticated' };
+      const outcome = await runInterrogate({
+        host: creds.host,
+        port: creds.port,
+        path: creds.path,
+        scheme: creds.scheme,
+        username: creds.username,
+        password: creds.password
+      }, options);
+      if (!outcome.ok) {
+        return { error: outcome.error === 'auth_failed' ? 'auth_failed' : 'unreachable' };
+      }
+      const profiles = outcome.profiles.map((profile) => ({ id: profile.id, label: profile.label }));
+      upsertSnapshot.run(
+        id,
+        outcome.manufacturer,
+        outcome.model,
+        outcome.firmware,
+        JSON.stringify(profiles),
+        new Date().toISOString()
+      );
+      return {
+        info: {
+          manufacturer: outcome.manufacturer,
+          model: outcome.model,
+          firmware: outcome.firmware,
+          profiles
+        }
+      };
+    },
+
+    async saveConfigured(id, input) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      const current = read(id);
+      if (!current) return { error: 'not_found' };
+      if (!getCred.get(id)) return { error: 'not_authenticated' };
+      const snapshot = readSnapshot(getSnapshot, id);
+      if (!snapshot) return { error: 'not_interrogated' };
+      const name = cleanText(input?.name, 'name');
+      const site = cleanText(input?.site, 'site', true);
+      const group = cleanText(input?.group, 'group', true);
+      let profileId = current.profileId ?? null;
+      let profileLabel = current.profileLabel ?? null;
+      if (input && Object.prototype.hasOwnProperty.call(input, 'profileId')) {
+        const requested = input.profileId;
+        if (requested == null || requested === '') {
+          profileId = null;
+          profileLabel = null;
+        } else if (typeof requested !== 'string') {
+          invalid();
+        } else {
+          const match = snapshot.profiles.find((profile) => profile.id === requested);
+          if (!match) invalid();
+          profileId = match.id;
+          profileLabel = match.label;
+        }
+      }
+      updateConfigured.run(
+        name,
+        site,
+        group,
+        snapshot.manufacturer,
+        snapshot.model,
+        profileId,
+        profileLabel,
+        id
+      );
+      const camera = read(id);
+      if (!camera) return { error: 'not_found' };
+      return { camera };
+    },
+
     close() {
       db.close();
     }
+  };
+}
+
+function ensureColumn(db, name, ddlType) {
+  const columns = db.prepare('PRAGMA table_info(cameras)').all();
+  if (!columns.some((column) => column.name === name)) {
+    db.exec(`ALTER TABLE cameras ADD COLUMN ${name} ${ddlType}`);
+  }
+}
+
+function readSnapshot(stmt, id) {
+  const row = stmt.get(id);
+  if (!row) return null;
+  let profiles = [];
+  try {
+    const parsed = JSON.parse(row.profiles_json);
+    if (Array.isArray(parsed)) {
+      profiles = parsed
+        .filter((profile) => profile && typeof profile.id === 'string' && profile.id && typeof profile.label === 'string' && profile.label)
+        .map((profile) => ({ id: profile.id, label: profile.label }));
+    }
+  } catch {
+    profiles = [];
+  }
+  return {
+    manufacturer: typeof row.manufacturer === 'string' && row.manufacturer ? row.manufacturer : null,
+    model: typeof row.model === 'string' && row.model ? row.model : null,
+    firmware: typeof row.firmware === 'string' && row.firmware ? row.firmware : null,
+    profiles
   };
 }
 

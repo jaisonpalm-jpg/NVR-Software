@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createCameraStore } from './persistence.js';
 import { discoverOnvif, parseDiscoverRequest, toDiscoverResponse } from './onvif-discover.js';
 import { authContract, parseAuthenticateRequest, runAuthenticate } from './onvif-auth.js';
+import { configureContract, interrogateContract } from './onvif-interrogate.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultDbPath = process.env.VMS_DB_PATH || path.join(root, 'data', 'vms.sqlite');
@@ -31,11 +32,12 @@ export function startServer({
   host = '127.0.0.1',
   dbPath = defaultDbPath,
   discoverOptions = {},
-  authOptions = {}
+  authOptions = {},
+  interrogateOptions = {}
 } = {}) {
   const store = createCameraStore(dbPath);
   const server = http.createServer((req, res) => {
-    dispatch(req, res, store, discoverOptions, authOptions).catch((err) => {
+    dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions).catch((err) => {
       if (res.headersSent) return;
       const status = err.code === 'VALIDATION' ? 400 : err.code === 'LIMIT' ? 413 : 500;
       const error = err.code === 'VALIDATION'
@@ -62,11 +64,29 @@ export function startServer({
   });
 }
 
-async function dispatch(req, res, store, discoverOptions, authOptions) {
+async function dispatch(req, res, store, discoverOptions, authOptions, interrogateOptions) {
   const pathname = requestPath(req);
 
   if (req.method === 'GET' && pathname === '/api/cameras') {
     sendJson(res, 200, await store.list());
+    return;
+  }
+
+  const interrogateMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/interrogate$/);
+  if (req.method === 'POST' && interrogateMatch) {
+    await readBody(req);
+    const id = decodeId(interrogateMatch[1]);
+    const outcome = await store.interrogate(id, interrogateOptions);
+    sendInterrogate(res, id, outcome);
+    return;
+  }
+
+  const configureMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/configure$/);
+  if (req.method === 'POST' && configureMatch) {
+    const body = await readBody(req);
+    const id = decodeId(configureMatch[1]);
+    const outcome = await store.saveConfigured(id, configureFields(body));
+    sendConfigure(res, outcome);
     return;
   }
 
@@ -158,6 +178,69 @@ async function dispatch(req, res, store, discoverOptions, authOptions) {
   }
 
   sendJson(res, 404, { ok: false, error: 'not_found' });
+}
+
+function configureFields(body) {
+  const fields = {
+    name: body?.name,
+    site: body?.site,
+    group: body?.group
+  };
+  if (body && Object.prototype.hasOwnProperty.call(body, 'profileId')) {
+    fields.profileId = body.profileId;
+  }
+  return fields;
+}
+
+function sendInterrogate(res, id, outcome) {
+  if (outcome.error === 'not_found') {
+    sendJson(res, 404, { ok: false, error: 'not_found' });
+    return;
+  }
+  if (outcome.error === 'not_authenticated') {
+    sendJson(res, 409, { ok: false, contract: interrogateContract(), error: 'not_authenticated' });
+    return;
+  }
+  if (outcome.error) {
+    const error = outcome.error === 'auth_failed' ? 'auth_failed' : 'unreachable';
+    sendJson(res, error === 'auth_failed' ? 401 : 502, {
+      ok: false,
+      contract: interrogateContract(),
+      error
+    });
+    return;
+  }
+  const info = outcome.info || {};
+  const payload = {
+    ok: true,
+    contract: interrogateContract(),
+    cameraId: id,
+    profiles: Array.isArray(info.profiles) ? info.profiles : []
+  };
+  if (info.manufacturer) payload.manufacturer = info.manufacturer;
+  if (info.model) payload.model = info.model;
+  if (info.firmware) payload.firmware = info.firmware;
+  sendJson(res, 200, payload);
+}
+
+function sendConfigure(res, outcome) {
+  if (outcome.error === 'not_found') {
+    sendJson(res, 404, { ok: false, error: 'not_found' });
+    return;
+  }
+  if (outcome.error === 'not_authenticated' || outcome.error === 'not_interrogated') {
+    sendJson(res, 409, { ok: false, contract: configureContract(), error: outcome.error });
+    return;
+  }
+  if (outcome.error) {
+    sendJson(res, 400, { ok: false, contract: configureContract(), error: 'invalid_request' });
+    return;
+  }
+  sendJson(res, 200, {
+    ok: true,
+    contract: configureContract(),
+    camera: outcome.camera
+  });
 }
 
 function requestPath(req) {

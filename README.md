@@ -1,6 +1,6 @@
 # Vision NVR
 
-WS1-U2 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, and authenticates a selected device on the server. This unit does not open streams or play video.
+WS1-U3 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, and configures that camera from non-secret device information. This unit does not open streams or play video.
 
 ## Run locally
 
@@ -59,7 +59,7 @@ The process must be allowed to send and receive UDP on the LAN interface. Replie
 
 This cloud agent VM has no route to a camera LAN. The probe still runs. With no answers it returns `devices: []`.
 
-IPv6 discovery is a later unit. This unit does call the ONVIF device service to prove a login. It does not resolve an RTSP URI or start a media server.
+IPv6 discovery is a later unit. Authentication and configure call the ONVIF device service, and configure also calls GetProfiles on a same-host media service when the device advertises one. This unit does not resolve an RTSP URI, start WebRTC, or start a media server such as MediaMTX or go2rtc.
 
 ## Authenticate a discovered device
 
@@ -83,6 +83,27 @@ The Cameras page password field posts that JSON to the server and is cleared on 
 
 This cloud VM has no route to a camera LAN, so a physical device was not authenticated here. The default client is still the device-service call. Tests inject `authOptions.client` or `authOptions.fetchImpl`. A call to a non-routable address returns `unreachable` and stores nothing. No RTSP URI is resolved, and WebRTC, MediaMTX, and go2rtc are not started.
 
+## Configure an authenticated camera
+
+Configure uses the login already stored in `camera_credentials`. The operator does not type the username or password again. Re-authentication is the only path that replaces that login.
+
+`POST /api/cameras/:id/interrogate` loads that stored login and calls `GetDeviceInformation` and `GetCapabilities` on the device service. When capabilities advertise a media service on the same host, it calls `GetProfiles` there. It does not call `GetStreamUri`. The response is non-secret device information and profile ids and labels. A media address with URL userinfo is stripped before use, and a media address on a different host is ignored. Username, password, serial number, and stream URIs are not returned. A failed read returns `auth_failed` or `unreachable` and does not change the camera.
+
+`POST /api/cameras/:id/configure` saves `name`, `site`, and `group`, plus an optional `profileId` chosen from the profiles just read. The saved camera status is `configured`. Public GETs may then include `manufacturer`, `model`, `profileId`, and `profileLabel`. They still do not include the login, a stream URL, or firmware. `GET /api/cameras/:id/stream` stays `{ "stream": null, "delivery": "unavailable" }`. Saving before a successful read returns `not_interrogated`. A camera with no stored login returns `not_authenticated`. Signing in again clears the saved device fields and sets status back to `authenticated`.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/interrogate \
+  -H 'content-type: application/json' \
+  -d '{}'
+curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/configure \
+  -H 'content-type: application/json' \
+  -d '{"name":"Gate","site":"Main","group":"Exterior","profileId":"Profile_1"}'
+```
+
+The Cameras page **Configure** card lists authenticated cameras, reads the device, and saves those fields. It has no password field.
+
+This cloud VM has no route to a camera LAN, so a physical device was not interrogated here. The default client is still the device and media capability calls. Tests inject `interrogateOptions.client` or `interrogateOptions.fetchImpl`. A call to a non-routable address returns `unreachable`. No RTSP URI is resolved, and WebRTC, MediaMTX, and go2rtc are not started.
+
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
   -H 'content-type: application/json' \
@@ -99,6 +120,8 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
 | `GET` | `/api/cameras/:id/stream` | `{ "stream": null, "delivery": "unavailable" }`. No stream URL. |
 | `POST` | `/api/onvif/discover` | Live WS-Discovery probe. `implemented: true`. `devices` is an array. |
 | `POST` | `/api/onvif/authenticate` | Device-service login. Stores credentials only in SQLite. Response has no username or password. |
+| `POST` | `/api/cameras/:id/interrogate` | Reads device info and profiles with the stored login. Response has no username, password, or stream URL. |
+| `POST` | `/api/cameras/:id/configure` | Saves name, site, group, and an optional profile id. Status becomes `configured`. |
 | `POST` | `/api/onvif/test` | Checks reported as `not_run`. |
 
 Example:
@@ -111,8 +134,8 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/test -H 'content-type: applicat
 
 Saved cameras from `POST /api/cameras` accept a display name, site, and group only. That route drops every other field, including a password. Text that contains URL userinfo is stored without that userinfo. Responses never include a stream URL. A password is stored only by the authenticate route, and only in `camera_credentials`.
 
-`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, and that secret-bearing fields are not logged or returned.
+`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, and that secret-bearing fields are not logged or returned.
 
 ## UI scope
 
-Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles are the existing visual placeholders. Playback, Storage, and Settings are shells. Camera records added in the UI show under Cameras; they do not start video. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared.
+Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles are the existing visual placeholders. Playback, Storage, and Settings are shells. Camera records added in the UI show under Cameras; they do not start video. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. It does not ask for the password again and it does not open a stream.

@@ -2,7 +2,7 @@
   "name": "nvr-software",
   "private": true,
   "type": "module",
-  "description": "Vision NVR shell with ONVIF discovery and server-side device authentication",
+  "description": "Vision NVR shell with ONVIF discovery, server-side authentication, and configure",
   "engines": {
     "node": ">=22"
   },
@@ -10,6 +10,6 @@
     "start": "node --disable-warning=ExperimentalWarning server/index.js",
     "api": "node --disable-warning=ExperimentalWarning server/index.js",
     "frontend": "node --disable-warning=ExperimentalWarning server/index.js",
-    "test": "node --disable-warning=ExperimentalWarning --test server/camera-store.test.js server/onvif-discover.test.js server/onvif-auth.test.js"
+    "test": "node --disable-warning=ExperimentalWarning --test server/camera-store.test.js server/onvif-discover.test.js server/onvif-auth.test.js server/onvif-configure.test.js"
   }
 }

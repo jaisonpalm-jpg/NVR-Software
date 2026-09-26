@@ -407,7 +407,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
         <div class="section-head">
           <div>
             <div class="section-title">ONVIF</div>
-            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Test does not run checks.</div>
+            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Configure reads the device with that login and saves name, site, and group. Test does not run checks.</div>
           </div>
         </div>
         <div class="panel-body">
@@ -433,6 +433,35 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
                 </div>
                 <div class="control-row"><button class="btn btn-primary" type="submit" id="auth-btn" disabled>Authenticate</button></div>
                 <p class="card-sub" id="auth-result" role="status"></p>
+              </form>
+            </div>
+            <div class="card">
+              <div class="card-title">Configure</div>
+              <div class="card-sub">Read the device with the login stored on the server, then save a name, site, and group. No password is entered here, and no stream is opened.</div>
+              <form id="configure-form" autocomplete="off">
+                <p class="card-sub" id="configure-target">Select an authenticated camera.</p>
+                <div class="control-row"><button class="btn" type="button" id="interrogate-btn" disabled>Read device</button></div>
+                <p class="card-sub" id="configure-device" role="status"></p>
+                <div class="field">
+                  <label for="configure-name">Name</label>
+                  <input id="configure-name" name="name" maxlength="120" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="configure-site">Site</label>
+                  <input id="configure-site" name="site" maxlength="120" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="configure-group">Group</label>
+                  <input id="configure-group" name="group" maxlength="120" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="configure-profile">Profile</label>
+                  <select id="configure-profile">
+                    <option value="">No profile selected</option>
+                  </select>
+                </div>
+                <div class="control-row"><button class="btn btn-primary" type="submit" id="configure-btn" disabled>Save configuration</button></div>
+                <p class="card-sub" id="configure-result" role="status"></p>
               </form>
             </div>
             <div class="card">
@@ -537,6 +566,9 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   const addForm = document.getElementById('add-camera-form');
   const addError = document.getElementById('add-camera-error');
   let selectedDevice = null;
+  let cameraRecords = [];
+  let selectedCameraId = '';
+  let profilesLoaded = false;
 
   function showPage(pageId) {
     navBtns.forEach((btn) => {
@@ -574,6 +606,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   });
 
   function renderCameras(cameras) {
+    cameraRecords = cameras;
     cameraList.replaceChildren();
     cameraCount.textContent = cameras.length ? cameras.length + ' saved' : 'No cameras saved';
     if (!cameras.length) {
@@ -585,7 +618,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       title.textContent = 'No cameras saved';
       const sub = document.createElement('div');
       sub.className = 'row-sub';
-      sub.textContent = 'Add a name, site, and group, or authenticate a discovered device. Discovery alone does not add devices.';
+      sub.textContent = 'Authenticate a discovered device, then configure it. Discovery alone does not add devices.';
       text.append(title, sub);
       row.append(text);
       cameraList.append(row);
@@ -600,12 +633,23 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       title.textContent = camera.name || 'Camera';
       const sub = document.createElement('div');
       sub.className = 'row-sub';
-      sub.textContent = [camera.site, camera.group].filter(Boolean).join(' · ') || 'No site';
+      const place = [camera.site, camera.group].filter(Boolean).join(' · ');
+      const device = [camera.manufacturer, camera.model].filter(Boolean).join(' ');
+      const profile = camera.profileLabel ? 'Profile ' + camera.profileLabel : '';
+      sub.textContent = [place, device, profile].filter(Boolean).join(' · ') || 'No site';
       text.append(title, sub);
       const pill = document.createElement('span');
-      pill.className = camera.status === 'authenticated' ? 'pill green' : 'pill gray';
+      pill.className = camera.status === 'configured' || camera.status === 'authenticated' ? 'pill green' : 'pill gray';
       pill.textContent = camera.status || 'unknown';
       row.append(text, pill);
+      if ((camera.status === 'authenticated' || camera.status === 'configured') && camera.id) {
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.className = 'btn configure-pick';
+        pick.textContent = 'Configure';
+        pick.dataset.id = camera.id;
+        row.append(pick);
+      }
       cameraList.append(row);
     });
   }
@@ -617,6 +661,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       const data = await response.json();
       renderCameras(Array.isArray(data) ? data.map(publicCamera) : []);
     } catch {
+      cameraRecords = [];
       cameraCount.textContent = 'Camera list unavailable';
       cameraList.replaceChildren();
       const row = document.createElement('div');
@@ -635,12 +680,18 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   }
 
   function publicCamera(camera) {
-    return {
+    const row = {
+      id: typeof camera.id === 'string' ? camera.id : '',
       name: typeof camera.name === 'string' ? camera.name : '',
       site: typeof camera.site === 'string' ? camera.site : '',
       group: typeof camera.group === 'string' ? camera.group : '',
       status: typeof camera.status === 'string' ? camera.status : 'unknown'
     };
+    if (typeof camera.manufacturer === 'string' && camera.manufacturer) row.manufacturer = camera.manufacturer;
+    if (typeof camera.model === 'string' && camera.model) row.model = camera.model;
+    if (typeof camera.profileLabel === 'string' && camera.profileLabel) row.profileLabel = camera.profileLabel;
+    if (typeof camera.profileId === 'string' && camera.profileId) row.profileId = camera.profileId;
+    return row;
   }
 
   addForm.addEventListener('submit', async (event) => {
@@ -862,7 +913,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
         data = null;
       }
       if (data && data.authenticated === true) {
-        result.textContent = 'Authenticated. The login stays on the server.';
+        result.textContent = 'Authenticated. The login stays on the server. Use Configure without entering it again.';
         loadCameras();
       } else if (data && data.error === 'unreachable') {
         result.textContent = 'The device did not answer. The login was not stored.';
@@ -875,6 +926,163 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       payload.username = '';
       payload.password = '';
       button.disabled = !selectedDevice;
+    }
+  });
+
+  cameraList.addEventListener('click', (event) => {
+    const button = event.target.closest('button.configure-pick');
+    if (!button) return;
+    const camera = cameraRecords.find((item) => item.id === button.dataset.id);
+    if (!camera) return;
+    selectedCameraId = camera.id;
+    profilesLoaded = false;
+    document.getElementById('configure-target').textContent = (camera.name || 'Camera') + ' · ' + (camera.status || 'authenticated');
+    document.getElementById('configure-name').value = camera.name || '';
+    document.getElementById('configure-site').value = camera.site || '';
+    document.getElementById('configure-group').value = camera.group || '';
+    document.getElementById('configure-device').textContent = '';
+    document.getElementById('configure-result').textContent = '';
+    resetProfiles();
+    document.getElementById('interrogate-btn').disabled = false;
+    document.getElementById('configure-btn').disabled = false;
+    document.getElementById('configure-name').focus();
+  });
+
+  function resetProfiles() {
+    const select = document.getElementById('configure-profile');
+    select.replaceChildren();
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'No profile selected';
+    select.append(empty);
+  }
+
+  document.getElementById('interrogate-btn').addEventListener('click', async () => {
+    const device = document.getElementById('configure-device');
+    const result = document.getElementById('configure-result');
+    const button = document.getElementById('interrogate-btn');
+    if (!selectedCameraId) {
+      device.textContent = 'Select an authenticated camera.';
+      return;
+    }
+    button.disabled = true;
+    device.textContent = 'Reading the device…';
+    result.textContent = '';
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(selectedCameraId) + '/interrogate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        body: '{}'
+      });
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (data && data.ok === true) {
+        const info = publicDeviceInfo(data);
+        const parts = [info.manufacturer, info.model, info.firmware].filter(Boolean);
+        device.textContent = parts.length ? parts.join(' · ') : 'Device answered. No model was reported.';
+        fillProfiles(info.profiles);
+        profilesLoaded = true;
+        result.textContent = 'Device read. The login stayed on the server.';
+      } else if (data && data.error === 'not_authenticated') {
+        device.textContent = 'This camera has no stored login. Authenticate it first.';
+      } else if (data && data.error === 'auth_failed') {
+        device.textContent = 'The stored login was rejected.';
+      } else if (data && data.error === 'unreachable') {
+        device.textContent = 'The device did not answer.';
+      } else {
+        device.textContent = 'The device could not be read.';
+      }
+    } catch {
+      device.textContent = 'Device read unavailable.';
+    } finally {
+      button.disabled = !selectedCameraId;
+    }
+  });
+
+  function publicDeviceInfo(data) {
+    const profiles = Array.isArray(data.profiles) ? data.profiles : [];
+    return {
+      manufacturer: typeof data.manufacturer === 'string' ? data.manufacturer : '',
+      model: typeof data.model === 'string' ? data.model : '',
+      firmware: typeof data.firmware === 'string' ? data.firmware : '',
+      profiles: profiles.filter((profile) => profile && typeof profile.id === 'string' && profile.id).map((profile) => ({
+        id: profile.id,
+        label: typeof profile.label === 'string' && profile.label ? profile.label : profile.id
+      }))
+    };
+  }
+
+  function fillProfiles(profiles) {
+    const select = document.getElementById('configure-profile');
+    const current = cameraRecords.find((item) => item.id === selectedCameraId);
+    resetProfiles();
+    profiles.forEach((profile) => {
+      const option = document.createElement('option');
+      option.value = profile.id;
+      option.textContent = profile.label;
+      select.append(option);
+    });
+    if (current && current.profileId) select.value = current.profileId;
+  }
+
+  document.getElementById('configure-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const result = document.getElementById('configure-result');
+    const button = document.getElementById('configure-btn');
+    if (!selectedCameraId) {
+      result.textContent = 'Select an authenticated camera.';
+      return;
+    }
+    const payload = {
+      name: document.getElementById('configure-name').value.trim(),
+      site: document.getElementById('configure-site').value.trim(),
+      group: document.getElementById('configure-group').value.trim()
+    };
+    if (profilesLoaded) payload.profileId = document.getElementById('configure-profile').value;
+    if (!payload.name) {
+      result.textContent = 'Enter a camera name.';
+      return;
+    }
+    button.disabled = true;
+    result.textContent = 'Saving configuration…';
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(selectedCameraId) + '/configure', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        body: JSON.stringify(payload)
+      });
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (data && data.ok === true && data.camera && data.camera.status === 'configured') {
+        result.textContent = 'Configuration saved. No stream was opened.';
+        loadCameras();
+      } else if (data && data.error === 'not_authenticated') {
+        result.textContent = 'This camera has no stored login. Authenticate it first.';
+      } else if (data && data.error === 'not_interrogated') {
+        result.textContent = 'Read the device before saving.';
+      } else if (data && data.error === 'unreachable') {
+        result.textContent = 'The device did not answer. Nothing was saved.';
+      } else if (data && data.error === 'auth_failed') {
+        result.textContent = 'The stored login was rejected. Nothing was saved.';
+      } else {
+        result.textContent = 'Configuration could not be saved.';
+      }
+    } catch {
+      result.textContent = 'Configuration unavailable.';
+    } finally {
+      button.disabled = !selectedCameraId;
     }
   });
 
