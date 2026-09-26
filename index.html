@@ -5,7 +5,7 @@
   <title>Vision NVR — Modern VMS UI</title>
   <style>
     :root {
-      --bg: #05070c;
+      --bg: #10161f;
       --panel: #0d121b;
       --panel-2: #111925;
       --panel-3: #172233;
@@ -31,7 +31,7 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background:
     radial-gradient(circle at 12% -8%, rgba(47,107,255,.18), transparent 32%),
-    linear-gradient(180deg, #151c27, #10161f 72%);
+    linear-gradient(180deg, #151c27, var(--bg) 72%);
 }
 
 button, input, select { font: inherit; }
@@ -92,7 +92,8 @@ button:disabled { opacity: .6; cursor: default; }
   transition: .16s ease;
 }
 .nav-btn.active, .nav-btn:hover { background: rgba(255,255,255,.09); color: var(--text); }
-.nav-btn.active { background: #2f6bff; color: #f7f9ff; }
+.nav-btn.active { background: var(--blue); color: #f7f9ff; }
+.nav-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .btn, .icon-btn {
@@ -105,7 +106,9 @@ button:disabled { opacity: .6; cursor: default; }
   font-size: 13px;
   white-space: nowrap;
 }
-.btn-primary { background: linear-gradient(135deg, var(--green), var(--blue)); color: #041018; border-color: transparent; }
+.btn-primary { background: var(--blue); color: #f7f9ff; border-color: transparent; box-shadow: 0 10px 24px rgba(47,107,255,.28); }
+.btn-primary:hover:not(:disabled) { background: #4c82ff; }
+button:focus-visible, .btn:focus-visible, .btn-primary:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .shell { min-height: 0; position: relative; }
 .page { display: none; height: 100%; min-height: 0; }
@@ -118,7 +121,7 @@ button:disabled { opacity: .6; cursor: default; }
   letter-spacing: .01em;
 }
 .pill.green { color: #7bf0b3; background: rgba(41,209,125,.14); }
-.pill.blue { color: #9ccaff; background: rgba(76,157,255,.14); }
+.pill.blue { color: #d7e6ff; background: rgba(47,107,255,.16); }
 .pill.orange { color: #ffd290; background: rgba(255,184,77,.14); }
 .pill.red { color: #ff9ca6; background: rgba(255,97,112,.14); }
 .pill.gray { color: var(--muted); background: rgba(255,255,255,.08); }
@@ -152,7 +155,7 @@ button:disabled { opacity: .6; cursor: default; }
   padding: 12px; border-radius: 15px; margin-bottom: 9px;
   background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.065);
 }
-.site-card.active { background: rgba(76,157,255,.13); border-color: rgba(76,157,255,.35); }
+.site-card.active { background: rgba(47,107,255,.16); border-color: rgba(47,107,255,.45); }
 .site-title { font-weight: 900; }
 .site-meta { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.35; }
 
@@ -172,7 +175,8 @@ button:disabled { opacity: .6; cursor: default; }
 
 .layout-select { display: flex; gap: 5px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,.055); border: 1px solid var(--line); }
 .layout-select button { padding: 8px 10px; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 950; font-size: 12px; }
-.layout-select button.active { background: #2f6bff; color: #f7f9ff; }
+.layout-select button.active { background: var(--blue); color: #f7f9ff; }
+.layout-select button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .camera-wall {
   min-height: 0;
@@ -283,7 +287,7 @@ button:disabled { opacity: .6; cursor: default; }
 .feed-name { font-weight: 950; letter-spacing: -.03em; }
 .feed-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
 .feed-actions { display: flex; gap: 6px; }
-.feed-action { width: 32px; height: 32px; border-radius: 11px; display: grid; place-items: center; color: var(--text); background: rgba(0,0,0,.32); border: 1px solid rgba(255,255,255,.12); font-weight: 900; font-size: 12px; }
+.feed-action { width: 32px; height: 32px; border-radius: 11px; display: grid; place-items: center; color: var(--text); background: rgba(13,18,27,.82); border: 1px solid rgba(255,255,255,.12); font-weight: 900; font-size: 12px; }
 
 .bottom-dock { grid-column: 1 / -1; display: grid; grid-template-columns: 1.1fr 2fr 1fr; gap: 12px; min-height: 0; }
 .dock-card { padding: 14px; }
@@ -323,11 +327,22 @@ button:disabled { opacity: .6; cursor: default; }
 .card-sub { color: var(--muted); font-size: 13px; margin-top: 6px; line-height: 1.45; }
 .field { display: grid; gap: 7px; margin-top: 12px; }
 label { color: var(--muted); font-size: 12px; font-weight: 850; }
-input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 13px; padding: 11px 12px; outline: none; }
+input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 13px; padding: 11px 12px; }
+input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-color: rgba(47,107,255,.65); }
+.wizard-steps { counter-reset: wizard-step; }
+.wizard-steps > .card { counter-increment: wizard-step; border-color: rgba(47,107,255,.28); }
+.wizard-steps > .card .card-title { display: flex; align-items: center; gap: 8px; }
+.wizard-steps > .card .card-title::before {
+  content: counter(wizard-step);
+  width: 22px; height: 22px; border-radius: 999px;
+  display: inline-grid; place-items: center; flex: 0 0 auto;
+  background: var(--blue); color: #f7f9ff;
+  font-size: 11px; letter-spacing: 0; font-weight: 900;
+}
 
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.68); display: none; place-items: center; z-index: 50; padding: 18px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(8,12,18,.72); display: none; place-items: center; z-index: 50; padding: 18px; }
 .modal-backdrop.open { display: grid; }
-.modal { width: min(760px,100%); background: #0d121b; border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; }
+.modal { width: min(760px,100%); background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 9px; padding: 14px; border-top: 1px solid var(--line); }
 
 @media (max-width: 1160px) {
@@ -463,7 +478,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
           </div>
         </div>
         <div class="panel-body">
-          <div class="setup-grid">
+          <div class="setup-grid wizard-steps">
             <div class="card">
               <div class="card-title">Discover</div>
               <div class="card-sub">Search this network for ONVIF devices. Results stay off the camera list until you add one yourself.</div>
@@ -592,7 +607,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
         <div class="panel-body">
           <div class="card">
             <div class="card-title">Appearance</div>
-            <div class="card-sub">Near-black surfaces, green for healthy state, blue accent. Theme controls are not wired in this unit.</div>
+            <div class="card-sub">Deep charcoal panels and an electric blue primary accent. Theme controls are not wired in this unit.</div>
           </div>
         </div>
       </section>
