@@ -231,7 +231,8 @@ button { border: 0; cursor: pointer; }
 .storage-fill { width: 67%; height: 100%; background: linear-gradient(90deg, var(--green), var(--orange)); }
 
 /* GENERAL PAGES */
-.page-grid { display: grid; grid-template-columns: 320px 1fr; gap: 12px; height: 100%; min-height: 0; }
+.page-grid { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 12px; height: 100%; min-height: 0; min-width: 0; width: 100%; }
+.shell { min-width: 0; overflow: hidden; }
 .panel { min-height: 0; }
 .panel-body { padding: 14px; overflow: auto; }
 .list-row {
@@ -262,7 +263,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
 .modal-footer { display: flex; justify-content: flex-end; gap: 9px; padding: 14px; border-top: 1px solid var(--line); }
 
 @media (max-width: 1160px) {
-  body { overflow: auto; height: auto; }
+  body { overflow-x: hidden; overflow-y: auto; height: auto; }
   .app { height: auto; min-height: 100vh; }
   .topbar { grid-template-columns: 1fr; }
   .nav { justify-self: stretch; }
@@ -272,7 +273,14 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   .bottom-dock { grid-template-columns: 1fr; }
   .page-grid { grid-template-columns: 1fr; }
 }
+#cameras { min-width: 0; }
+#cameras > .page-grid { height: 100%; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); }
+#cameras .panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+#cameras .panel-body, #cameras .card, #cameras .card-sub { min-width: 0; overflow-wrap: anywhere; }
+#cameras .section-head > div { min-width: 0; }
+
 @media (max-width: 760px) {
+  #cameras > .page-grid { grid-template-columns: 1fr; }
   .app { padding: 8px; gap: 8px; }
   .camera-wall { grid-template-columns: 1fr; grid-template-rows: none; min-height: auto; }
   .feed, .feed.hero { grid-column: auto; grid-row: auto; height: 280px; }
@@ -411,7 +419,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
             </div>
             <div class="card">
               <div class="card-title">Test</div>
-              <div class="card-sub">Network, ONVIF, streams, PTZ, audio, and events stay not run. Unsupported is not a failure in the locked flow; this unit does not run the checks.</div>
+              <div class="card-sub">Network, ONVIF, streams, PTZ, audio, and events stay not run. This unit does not run the checks.</div>
               <div class="control-row"><button class="btn" type="button" id="test-btn">Run test stub</button></div>
               <div class="card-sub" id="test-result" aria-live="polite"></div>
             </div>
@@ -519,6 +527,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       page.classList.toggle('active', page.id === pageId);
     });
     if (pageId === 'cameras') loadCameras();
+    window.scrollTo(0, 0);
   }
 
   navBtns.forEach((btn) => {
