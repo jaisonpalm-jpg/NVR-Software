@@ -407,7 +407,7 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
         <div class="section-head">
           <div>
             <div class="section-title">ONVIF</div>
-            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Configure reads the device with that login and saves name, site, and group. Test checks that saved camera without opening a stream.</div>
+            <div class="section-sub">Discover probes the LAN. Authenticate sends login to the server. Configure reads the device with that login and saves name, site, and group. Test checks that saved camera without opening a stream. Review confirms the non-secret summary, then Success marks the camera ready for Live View in a later unit.</div>
           </div>
         </div>
         <div class="panel-body">
@@ -476,6 +476,32 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
               <div class="control-row"><button class="btn" type="button" id="test-btn" disabled>Run test</button></div>
               <div id="test-checks" aria-live="polite"></div>
               <p class="card-sub" id="test-result" role="status"></p>
+            </div>
+            <div class="card">
+              <div class="card-title">Review</div>
+              <div class="card-sub">Confirm the saved name, site, group, manufacturer, model, profile, and last test. No password is shown, and no stream is opened.</div>
+              <div class="field">
+                <label for="review-camera">Camera that passed Test</label>
+                <select id="review-camera">
+                  <option value="">Select a camera that passed Test</option>
+                </select>
+              </div>
+              <div id="review-summary" aria-live="polite"></div>
+              <div class="control-row"><button class="btn btn-primary" type="button" id="review-btn" disabled>Confirm review</button></div>
+              <p class="card-sub" id="review-result" role="status"></p>
+            </div>
+            <div class="card">
+              <div class="card-title">Success</div>
+              <div class="card-sub">After review, mark the camera ready for Live View in a later unit. This does not open a stream.</div>
+              <div class="field">
+                <label for="success-camera">Reviewed camera</label>
+                <select id="success-camera">
+                  <option value="">Select a reviewed camera</option>
+                </select>
+              </div>
+              <div id="success-summary" aria-live="polite"></div>
+              <div class="control-row"><button class="btn btn-primary" type="button" id="success-btn" disabled>Mark ready</button></div>
+              <p class="card-sub" id="success-result" role="status"></p>
             </div>
           </div>
         </div>
@@ -576,6 +602,8 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
   let cameraRecords = [];
   let selectedCameraId = '';
   let selectedTestId = '';
+  let selectedReviewId = '';
+  let selectedSuccessId = '';
   let profilesLoaded = false;
 
   function showPage(pageId) {
@@ -626,11 +654,13 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       title.textContent = 'No cameras saved';
       const sub = document.createElement('div');
       sub.className = 'row-sub';
-      sub.textContent = 'Authenticate a discovered device, then configure it. Discovery alone does not add devices.';
+      sub.textContent = 'Authenticate a discovered device, then configure and test it. Review and Success finish onboarding.';
       text.append(title, sub);
       row.append(text);
       cameraList.append(row);
       fillTestCameras(cameras);
+      fillReviewCameras(cameras);
+      fillSuccessCameras(cameras);
       return;
     }
     cameras.forEach((camera) => {
@@ -653,10 +683,10 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       sub.textContent = [place, device, profile, tested].filter(Boolean).join(' · ') || 'No site';
       text.append(title, sub);
       const pill = document.createElement('span');
-      pill.className = camera.status === 'configured' || camera.status === 'authenticated' ? 'pill green' : 'pill gray';
+      pill.className = camera.status === 'configured' || camera.status === 'authenticated' || camera.status === 'ready' ? 'pill green' : 'pill gray';
       pill.textContent = camera.status || 'unknown';
       row.append(text, pill);
-      if ((camera.status === 'authenticated' || camera.status === 'configured') && camera.id) {
+      if ((camera.status === 'authenticated' || camera.status === 'configured' || camera.status === 'ready') && camera.id) {
         const pick = document.createElement('button');
         pick.type = 'button';
         pick.className = 'btn configure-pick';
@@ -667,6 +697,8 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       cameraList.append(row);
     });
     fillTestCameras(cameras);
+    fillReviewCameras(cameras);
+    fillSuccessCameras(cameras);
   }
 
   async function loadCameras() {
@@ -712,6 +744,9 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
     if (typeof camera.lastTestAt === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(camera.lastTestAt)) {
       row.lastTestAt = camera.lastTestAt;
     }
+    if (typeof camera.reviewedAt === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(camera.reviewedAt)) {
+      row.reviewedAt = camera.reviewedAt;
+    }
     return row;
   }
 
@@ -736,6 +771,93 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       selectedTestId = '';
     }
     document.getElementById('test-btn').disabled = !selectedTestId;
+  }
+
+  function passedTest(camera) {
+    return camera.lastTestSummary === 'passed';
+  }
+
+  function fillReviewCameras(cameras) {
+    const select = document.getElementById('review-camera');
+    const previous = selectedReviewId;
+    select.replaceChildren();
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Select a camera that passed Test';
+    select.append(empty);
+    cameras.filter((camera) => camera.id && passedTest(camera) && (camera.status === 'configured' || camera.status === 'ready')).forEach((camera) => {
+      const option = document.createElement('option');
+      option.value = camera.id;
+      option.textContent = camera.name || 'Camera';
+      select.append(option);
+    });
+    const still = previous && cameras.some((camera) => camera.id === previous && passedTest(camera) && (camera.status === 'configured' || camera.status === 'ready'));
+    selectedReviewId = still ? previous : '';
+    if (still) select.value = previous;
+    const camera = cameras.find((item) => item.id === selectedReviewId);
+    renderSummary(document.getElementById('review-summary'), camera);
+    const reviewNote = document.getElementById('review-result');
+    const reviewConfirmed = 'Review confirmed. Continue to Success. No stream was opened.';
+    if (camera && (camera.reviewedAt || camera.status === 'ready')) {
+      document.getElementById('review-btn').disabled = true;
+      if (!reviewNote.textContent || reviewNote.textContent === 'Saving review…') reviewNote.textContent = reviewConfirmed;
+    } else {
+      document.getElementById('review-btn').disabled = !camera;
+      if (reviewNote.textContent === reviewConfirmed) reviewNote.textContent = '';
+    }
+  }
+
+  function fillSuccessCameras(cameras) {
+    const select = document.getElementById('success-camera');
+    const previous = selectedSuccessId;
+    select.replaceChildren();
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Select a reviewed camera';
+    select.append(empty);
+    cameras.filter((camera) => camera.id && passedTest(camera) && camera.reviewedAt && (camera.status === 'configured' || camera.status === 'ready')).forEach((camera) => {
+      const option = document.createElement('option');
+      option.value = camera.id;
+      option.textContent = camera.name || 'Camera';
+      select.append(option);
+    });
+    const still = previous && cameras.some((camera) => camera.id === previous && passedTest(camera) && camera.reviewedAt && (camera.status === 'configured' || camera.status === 'ready'));
+    selectedSuccessId = still ? previous : '';
+    if (still) select.value = previous;
+    const camera = cameras.find((item) => item.id === selectedSuccessId);
+    renderSummary(document.getElementById('success-summary'), camera);
+    const successNote = document.getElementById('success-result');
+    const successDone = 'Onboarding complete. This camera is ready for Live View in a later unit. No stream was opened.';
+    if (camera && camera.status === 'ready') {
+      document.getElementById('success-btn').disabled = true;
+      if (!successNote.textContent || successNote.textContent === 'Marking the camera ready…') successNote.textContent = successDone;
+    } else {
+      document.getElementById('success-btn').disabled = !camera;
+      if (successNote.textContent === successDone) successNote.textContent = '';
+    }
+  }
+
+  function renderSummary(target, camera) {
+    target.replaceChildren();
+    if (!camera) return;
+    const lastTest = camera.lastTestSummary === 'passed' || camera.lastTestSummary === 'failed'
+      ? camera.lastTestSummary
+      : 'not tested';
+    const rows = [
+      ['Name', camera.name || 'Camera'],
+      ['Site', camera.site || 'None'],
+      ['Group', camera.group || 'None'],
+      ['Manufacturer', camera.manufacturer || 'None'],
+      ['Model', camera.model || 'None'],
+      ['Profile', camera.profileLabel || 'None'],
+      ['Last test', lastTest]
+    ];
+    rows.forEach((pair) => {
+      const line = document.createElement('p');
+      line.className = 'card-sub';
+      line.textContent = pair[0] + ': ' + pair[1];
+      target.append(line);
+    });
   }
 
   addForm.addEventListener('submit', async (event) => {
@@ -1193,6 +1315,131 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
       target.append(line);
     });
   }
+
+  document.getElementById('review-camera').addEventListener('change', () => {
+    selectedReviewId = document.getElementById('review-camera').value;
+    const camera = cameraRecords.find((item) => item.id === selectedReviewId);
+    renderSummary(document.getElementById('review-summary'), camera);
+    const result = document.getElementById('review-result');
+    if (camera && (camera.status === 'ready' || camera.reviewedAt)) {
+      result.textContent = 'Review confirmed. Continue to Success. No stream was opened.';
+      document.getElementById('review-btn').disabled = true;
+    } else {
+      result.textContent = '';
+      document.getElementById('review-btn').disabled = !camera;
+    }
+  });
+
+  document.getElementById('review-btn').addEventListener('click', async () => {
+    const result = document.getElementById('review-result');
+    const button = document.getElementById('review-btn');
+    if (!selectedReviewId) {
+      result.textContent = 'Select a camera that passed Test.';
+      return;
+    }
+    button.disabled = true;
+    result.textContent = 'Saving review…';
+    let saved = false;
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(selectedReviewId) + '/review', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        body: JSON.stringify({ confirm: true })
+      });
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (data && data.ok === true) {
+        saved = true;
+        result.textContent = 'Review confirmed. Continue to Success. No stream was opened.';
+        if (!selectedSuccessId) selectedSuccessId = selectedReviewId;
+        await loadCameras();
+      } else if (data && data.error === 'test_failed') {
+        result.textContent = 'The last test failed. Review was not saved.';
+      } else if (data && data.error === 'not_tested') {
+        result.textContent = 'Review is available after a passed test.';
+      } else if (data && data.error === 'not_found') {
+        result.textContent = 'Camera not found.';
+      } else {
+        result.textContent = 'Review could not be saved.';
+      }
+    } catch {
+      result.textContent = 'Review unavailable.';
+    } finally {
+      if (!saved) {
+        const camera = cameraRecords.find((item) => item.id === selectedReviewId);
+        button.disabled = !camera || camera.status === 'ready' || !!camera.reviewedAt;
+      }
+    }
+  });
+
+  document.getElementById('success-camera').addEventListener('change', () => {
+    selectedSuccessId = document.getElementById('success-camera').value;
+    const camera = cameraRecords.find((item) => item.id === selectedSuccessId);
+    renderSummary(document.getElementById('success-summary'), camera);
+    const result = document.getElementById('success-result');
+    if (camera && camera.status === 'ready') {
+      result.textContent = 'Onboarding complete. This camera is ready for Live View in a later unit. No stream was opened.';
+      document.getElementById('success-btn').disabled = true;
+    } else {
+      result.textContent = '';
+      document.getElementById('success-btn').disabled = !camera;
+    }
+  });
+
+  document.getElementById('success-btn').addEventListener('click', async () => {
+    const result = document.getElementById('success-result');
+    const button = document.getElementById('success-btn');
+    if (!selectedSuccessId) {
+      result.textContent = 'Select a reviewed camera.';
+      return;
+    }
+    button.disabled = true;
+    result.textContent = 'Marking the camera ready…';
+    let saved = false;
+    try {
+      const response = await fetch('/api/cameras/' + encodeURIComponent(selectedSuccessId) + '/success', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        body: JSON.stringify({ confirm: true })
+      });
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (data && data.ok === true && data.camera && data.camera.status === 'ready') {
+        saved = true;
+        result.textContent = 'Onboarding complete. This camera is ready for Live View in a later unit. No stream was opened.';
+        await loadCameras();
+      } else if (data && data.error === 'not_reviewed') {
+        result.textContent = 'Confirm review before Success.';
+      } else if (data && data.error === 'test_failed') {
+        result.textContent = 'The last test failed. The camera was not marked ready.';
+      } else if (data && data.error === 'not_tested') {
+        result.textContent = 'Success is available after a passed test.';
+      } else if (data && data.error === 'not_found') {
+        result.textContent = 'Camera not found.';
+      } else {
+        result.textContent = 'The camera could not be marked ready.';
+      }
+    } catch {
+      result.textContent = 'Success unavailable.';
+    } finally {
+      if (!saved) {
+        const camera = cameraRecords.find((item) => item.id === selectedSuccessId);
+        button.disabled = !camera || camera.status === 'ready';
+      }
+    }
+  });
 
   loadCameras();
 </script>

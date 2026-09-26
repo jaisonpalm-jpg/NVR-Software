@@ -7,6 +7,7 @@ import { discoverOnvif, parseDiscoverRequest, toDiscoverResponse } from './onvif
 import { authContract, parseAuthenticateRequest, runAuthenticate } from './onvif-auth.js';
 import { configureContract, interrogateContract } from './onvif-interrogate.js';
 import { publicTestPayload, testContract } from './onvif-test.js';
+import { publicReviewPayload, publicSuccessPayload, reviewContract, successContract } from './onvif-review.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultDbPath = process.env.VMS_DB_PATH || path.join(root, 'data', 'vms.sqlite');
@@ -82,6 +83,30 @@ async function dispatch(req, res, store, discoverOptions, authOptions, interroga
     const id = decodeId(testMatch[1]);
     const outcome = await store.runTest(id, testOptions);
     sendTest(res, outcome);
+    return;
+  }
+
+  const reviewMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/review$/);
+  if (req.method === 'POST' && reviewMatch) {
+    const body = await readBody(req);
+    if (body.confirm !== true) {
+      sendJson(res, 400, { ok: false, contract: reviewContract(), error: 'invalid_request' });
+      return;
+    }
+    const outcome = await store.confirmReview(decodeId(reviewMatch[1]));
+    sendReview(res, outcome);
+    return;
+  }
+
+  const successMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/success$/);
+  if (req.method === 'POST' && successMatch) {
+    const body = await readBody(req);
+    if (body.confirm !== true) {
+      sendJson(res, 400, { ok: false, contract: successContract(), error: 'invalid_request' });
+      return;
+    }
+    const outcome = await store.markSuccess(decodeId(successMatch[1]));
+    sendSuccess(res, outcome);
     return;
   }
 
@@ -231,6 +256,16 @@ function sendInterrogate(res, id, outcome) {
 
 function sendTest(res, outcome) {
   const payload = publicTestPayload(outcome);
+  sendJson(res, payload.status, payload.body);
+}
+
+function sendReview(res, outcome) {
+  const payload = publicReviewPayload(outcome);
+  sendJson(res, payload.status, payload.body);
+}
+
+function sendSuccess(res, outcome) {
+  const payload = publicSuccessPayload(outcome);
   sendJson(res, payload.status, payload.body);
 }
 

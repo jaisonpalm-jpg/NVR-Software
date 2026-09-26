@@ -11,15 +11,16 @@ import { buildTestChecks, runDeviceProbe, testSummary } from './onvif-test.js';
  *
  * SQLite is the local adapter. A later PostgreSQL adapter can implement the
  * same async methods (list, get, create, saveAuthenticated, interrogate,
- * saveConfigured, runTest, close) without changing camera routes.
+ * saveConfigured, runTest, confirmReview, markSuccess, close) without
+ * changing camera routes.
  *
  * Public rows are an allowlist: id, name, site, group, status, createdAt,
  * plus optional non-secret configure fields manufacturer, model, profileId,
- * and profileLabel, plus optional lastTestAt and lastTestSummary. Device
- * login is stored only in camera_credentials. list, get, create, interrogate,
- * saveConfigured, and runTest never return that table. URL userinfo is
- * stripped from text fields so a stream address cannot carry a secret into
- * the client.
+ * and profileLabel, plus optional lastTestAt, lastTestSummary, and
+ * reviewedAt. Device login is stored only in camera_credentials. list, get,
+ * create, interrogate, saveConfigured, runTest, confirmReview, and
+ * markSuccess never return that table. URL userinfo is stripped from text
+ * fields so a stream address cannot carry a secret into the client.
  */
 
 const PUBLIC_FIELDS = ['id', 'name', 'site', 'group', 'status', 'createdAt'];
@@ -43,7 +44,14 @@ export function publicCamera(row) {
     camera.lastTestSummary = row.lastTestSummary;
     camera.lastTestAt = row.lastTestAt;
   }
-  const allowed = new Set([...PUBLIC_FIELDS, ...OPTIONAL_PUBLIC_FIELDS, 'lastTestAt', 'lastTestSummary']);
+  if (isoTimestamp(row.reviewedAt)) camera.reviewedAt = row.reviewedAt;
+  const allowed = new Set([
+    ...PUBLIC_FIELDS,
+    ...OPTIONAL_PUBLIC_FIELDS,
+    'lastTestAt',
+    'lastTestSummary',
+    'reviewedAt'
+  ]);
   for (const key of Object.keys(camera)) {
     if (!allowed.has(key)) delete camera[key];
   }
@@ -95,6 +103,7 @@ export function createCameraStore(dbPath) {
   ensureColumn(db, 'profile_label', 'TEXT');
   ensureColumn(db, 'last_test_at', 'TEXT');
   ensureColumn(db, 'last_test_summary', 'TEXT');
+  ensureColumn(db, 'reviewed_at', 'TEXT');
   try {
     fs.chmodSync(dbPath, 0o600);
   } catch {
@@ -104,14 +113,16 @@ export function createCameraStore(dbPath) {
   const listStmt = db.prepare(`
     SELECT id, name, site, group_name AS "group", status, created_at AS createdAt,
       manufacturer, model, profile_id AS profileId, profile_label AS profileLabel,
-      last_test_at AS lastTestAt, last_test_summary AS lastTestSummary
+      last_test_at AS lastTestAt, last_test_summary AS lastTestSummary,
+      reviewed_at AS reviewedAt
     FROM cameras
     ORDER BY created_at ASC, id ASC
   `);
   const getStmt = db.prepare(`
     SELECT id, name, site, group_name AS "group", status, created_at AS createdAt,
       manufacturer, model, profile_id AS profileId, profile_label AS profileLabel,
-      last_test_at AS lastTestAt, last_test_summary AS lastTestSummary
+      last_test_at AS lastTestAt, last_test_summary AS lastTestSummary,
+      reviewed_at AS reviewedAt
     FROM cameras
     WHERE id = ?
   `);
@@ -150,7 +161,7 @@ export function createCameraStore(dbPath) {
   const clearDetails = db.prepare(`
     UPDATE cameras
     SET manufacturer = NULL, model = NULL, profile_id = NULL, profile_label = NULL,
-      last_test_at = NULL, last_test_summary = NULL
+      last_test_at = NULL, last_test_summary = NULL, reviewed_at = NULL
     WHERE id = ?
   `);
   const deleteSnapshot = db.prepare(`
@@ -175,13 +186,20 @@ export function createCameraStore(dbPath) {
   const updateConfigured = db.prepare(`
     UPDATE cameras
     SET name = ?, site = ?, group_name = ?, status = 'configured',
-      manufacturer = ?, model = ?, profile_id = ?, profile_label = ?
+      manufacturer = ?, model = ?, profile_id = ?, profile_label = ?,
+      reviewed_at = NULL
     WHERE id = ?
   `);
   const markTested = db.prepare(`
     UPDATE cameras
-    SET last_test_at = ?, last_test_summary = ?
+    SET last_test_at = ?, last_test_summary = ?, reviewed_at = NULL
     WHERE id = ?
+  `);
+  const markReviewed = db.prepare(`
+    UPDATE cameras SET reviewed_at = ? WHERE id = ?
+  `);
+  const markReady = db.prepare(`
+    UPDATE cameras SET status = 'ready' WHERE id = ?
   `);
 
   function read(id) {
@@ -336,6 +354,35 @@ export function createCameraStore(dbPath) {
       return { cameraId: id, summary, checkedAt, checks };
     },
 
+    async confirmReview(id) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      const current = read(id);
+      if (!current) return { error: 'not_found' };
+      const gate = onboardingGate(current);
+      if (gate) return { error: gate };
+      if (!isoTimestamp(current.reviewedAt)) {
+        markReviewed.run(new Date().toISOString(), id);
+      }
+      const camera = read(id);
+      if (!camera) return { error: 'not_found' };
+      return { camera };
+    },
+
+    async markSuccess(id) {
+      if (typeof id !== 'string' || !id) return { error: 'not_found' };
+      const current = read(id);
+      if (!current) return { error: 'not_found' };
+      const gate = onboardingGate(current);
+      if (gate) return { error: gate };
+      if (current.status === 'ready') return { camera: current };
+      if (!isoTimestamp(current.reviewedAt)) return { error: 'not_reviewed' };
+      if (current.status !== 'configured') return { error: 'not_tested' };
+      markReady.run(id);
+      const camera = read(id);
+      if (!camera) return { error: 'not_found' };
+      return { camera };
+    },
+
     close() {
       db.close();
     }
@@ -399,6 +446,13 @@ function cleanText(value, field, optional = false) {
   }
   if (redacted.length > MAX_TEXT) invalid();
   return redacted;
+}
+
+function onboardingGate(camera) {
+  if (camera.lastTestSummary === 'failed') return 'test_failed';
+  if (camera.lastTestSummary !== 'passed') return 'not_tested';
+  if (camera.status !== 'configured' && camera.status !== 'ready') return 'not_tested';
+  return null;
 }
 
 function isoTimestamp(value) {

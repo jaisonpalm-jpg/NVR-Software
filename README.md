@@ -1,6 +1,6 @@
 # Vision NVR
 
-WS1-U4 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, configures that camera from non-secret device information, and runs non-media test checks with the stored login. This unit does not open streams or play video.
+WS1-U5 shell for the VMS. The frontend is the baseline Vision NVR page with locked primary navigation. The API stores cameras in SQLite, probes the LAN for ONVIF devices, authenticates a selected device on the server, configures that camera from non-secret device information, runs non-media test checks with the stored login, and closes onboarding with Review and Success. This unit does not open streams or play video. Live View is the next unit. Credentials stay on the server.
 
 ## Run locally
 
@@ -157,6 +157,39 @@ The Cameras page **Test** card lists configured cameras and runs this call. It h
 
 This cloud VM has no route to a camera LAN, so a physical device was not tested here. The default client is still the TCP connect plus `GetDeviceInformation`. Tests inject `testOptions.client`, `testOptions.connectImpl`, or `testOptions.fetchImpl`. A non-routable address fails `network` and does not open a stream.
 
+## Review, then Success
+
+Review and Success run after a passed Test. They do not call the device and they do not read the stored login. The operator does not type a username or password. A request body cannot replace that login. Fields other than `confirm: true` are ignored.
+
+`POST /api/cameras/:id/review` confirms the non-secret summary for a camera whose status is `configured` and whose `lastTestSummary` is `passed`. The server stores `reviewedAt`. Status stays `configured`. A camera that has not passed Test returns `not_tested` (HTTP 409). A camera whose last test failed returns `test_failed` (HTTP 409). Confirming again keeps the same `reviewedAt`.
+
+`POST /api/cameras/:id/success` marks that reviewed camera `ready`. `ready` means onboarding is finished and the camera can be used by Live View in a later unit. It does not mean a stream is open, and it does not mean the device was contacted again. Success before review returns `not_reviewed` (HTTP 409). The same not-tested and failed-test rejections apply. Marking a camera that is already `ready` returns the saved row again.
+
+Public GETs may include `reviewedAt` after review, and `status` `ready` after success. They still omit the login, firmware, and any stream URL. `GET /api/cameras/:id/stream` stays `{ "stream": null, "delivery": "unavailable" }`.
+
+A new Test run clears `reviewedAt`, so Success requires Review again. Saving Configure again returns status to `configured` and clears `reviewedAt`. The last test summary remains until a new test or a new sign-in. Signing in again clears the test summary, the review time, and the ready state, and sets status back to `authenticated`.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/review \
+  -H 'content-type: application/json' \
+  -d '{"confirm":true}'
+curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/success \
+  -H 'content-type: application/json' \
+  -d '{"confirm":true}'
+```
+
+```json
+{"ok":false,"contract":"onvif.review.v0","error":"not_tested"}
+```
+
+```json
+{"ok":false,"contract":"onvif.success.v0","error":"test_failed"}
+```
+
+The Cameras page **Review** card lists cameras that passed Test and shows name, site, group, manufacturer, model, profile label, and last test summary. **Success** lists a reviewed camera and marks it ready. Neither card has a password field, and neither card shows video.
+
+This step does not need a camera LAN. No device call is made.
+
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
   -H 'content-type: application/json' \
@@ -177,6 +210,8 @@ curl -sS -X POST http://127.0.0.1:8787/api/onvif/authenticate \
 | `POST` | `/api/cameras/:id/configure` | Saves name, site, group, and an optional profile id. Status becomes `configured`. |
 | `POST` | `/api/cameras/:id/test` | Non-media checks for a configured camera, using the stored login. Media checks are `skipped`. |
 | `POST` | `/api/onvif/test` | Same test. Body is `{ "cameraId": "<id>" }`. Other fields are ignored. |
+| `POST` | `/api/cameras/:id/review` | Confirms the non-secret summary after a passed test. Stores `reviewedAt`. Body is `{ "confirm": true }`. |
+| `POST` | `/api/cameras/:id/success` | Marks a reviewed camera `ready` without opening a stream. Body is `{ "confirm": true }`. |
 
 Example:
 
@@ -188,8 +223,8 @@ curl -sS -X POST http://127.0.0.1:8787/api/cameras/<id>/test -H 'content-type: a
 
 Saved cameras from `POST /api/cameras` accept a display name, site, and group only. That route drops every other field, including a password. Text that contains URL userinfo is stored without that userinfo. Responses never include a stream URL. A password is stored only by the authenticate route, and only in `camera_credentials`.
 
-`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, non-media test checks with an injected device client, and that secret-bearing fields are not logged or returned.
+`npm test` checks the empty list, the discover envelope, a scripted ProbeMatches reply, the real socket path, device-service success and failure with an injected client, interrogation and configure save with an injected device client, non-media test checks with an injected device client, review and success for a passed test, rejection of untested and failed-test cameras, and that secret-bearing fields are not logged or returned.
 
 ## UI scope
 
-Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles are the existing visual placeholders. Playback, Storage, and Settings are shells. Camera records added in the UI show under Cameras; they do not start video. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. Test runs network, authentication, ONVIF, and saved device-info checks for a configured camera. Stream checks stay skipped. Configure and Test do not ask for the password again and they do not open a stream.
+Primary navigation is **Live View**, **Playback**, **Cameras**, **Storage**, and **Settings**. Live tiles are the existing visual placeholders. Playback, Storage, and Settings are shells. Camera records added in the UI show under Cameras; they do not start video. Discover results are not saved until Authenticate succeeds. The Authenticate card is the only place a password is typed, and that value is posted to the server and then cleared. Configure reads the stored device and saves name, site, group, and an optional profile. Test runs network, authentication, ONVIF, and saved device-info checks for a configured camera. Stream checks stay skipped. Review shows the non-secret summary and confirms it. Success marks the camera ready for Live View in a later unit. Configure, Test, Review, and Success do not ask for the password again and they do not open a stream.
