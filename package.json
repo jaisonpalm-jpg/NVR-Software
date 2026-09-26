@@ -1,0 +1,15 @@
+{
+  "name": "nvr-software",
+  "private": true,
+  "type": "module",
+  "description": "Vision NVR shell and WS1-U0 API stubs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "api": "node --disable-warning=ExperimentalWarning server/index.js",
+    "frontend": "node --disable-warning=ExperimentalWarning server/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test server/camera-store.test.js"
+  }
+}

@@ -291,12 +291,12 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
           <div class="brand-title">Vision NVR</div>
           <div class="brand-sub">Modern ONVIF / RTSP video management</div>
         </div>
-      </div><nav class="nav">
-    <button class="nav-btn active" data-page="live">Live Wall</button>
-    <button class="nav-btn" data-page="playback">Playback</button>
-    <button class="nav-btn" data-page="cameras">Camera Setup</button>
-    <button class="nav-btn" data-page="storage">Storage</button>
-    <button class="nav-btn" data-page="settings">Settings</button>
+      </div><nav class="nav" aria-label="Primary">
+    <button class="nav-btn active" type="button" data-page="live">Live View</button>
+    <button class="nav-btn" type="button" data-page="playback">Playback</button>
+    <button class="nav-btn" type="button" data-page="cameras">Cameras</button>
+    <button class="nav-btn" type="button" data-page="storage">Storage</button>
+    <button class="nav-btn" type="button" data-page="settings">Settings</button>
   </nav>
 
   <div class="top-actions">
@@ -362,5 +362,316 @@ input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.0
 
   <main class="page" id="playback">
     <div class="page-grid">
-      <aside class="panel"><div class="section-head"><div><div class="section-title">Playback Cameras</div><div class="section-sub">Select source</div></div></div><div class="panel-body"><div class="list-row"><div><div class="row-title">Front Lot Main</div><div class="row-sub">Continuous recording</div></div><span class="pill green">Ready</span></div><div class="list-row"><div><div class="row-title">Loading Dock</div><div class="row-sub">Motion events</div></div><span class="pill orange">24 clips</span></div><div class="list-row"><div><div class="row-title">Rear Yard PTZ</div><div class="row-sub">Continuous recording</div></div><span class="pill green">Ready</span></div></div></aside>
-      <section class="playback-view"><div class="playback-video"><span>PLAYBACK</span></div><div class="dock-card"><div class="dock-title">May 3, 2026 Timeline</div><div class="dock-line">Scrub recordings, jump to motion markers, export clips.</div><div class="timeline"><div class="rec" style="left:2%;width:36%"></div><div class="motion" style="left:44%;width:9%"></div><div class="rec" style="left:58%;width:34%"></div><div class="marker" style="left:47%"></div></div><div class="control-row"><button class="btn">◀ 10s</button><button class="btn btn-primary">▶ Play</button><button class="btn">Pause</button><button class="btn">1x</button><button class="btn">Snapshot</butt
+      <aside class="panel">
+        <div class="section-head"><div><div class="section-title">Playback</div><div class="section-sub">Shell only</div></div></div>
+        <div class="panel-body">
+          <div class="list-row"><div><div class="row-title">Front Lot Main</div><div class="row-sub">Placeholder source</div></div><span class="pill gray">Shell</span></div>
+          <div class="list-row"><div><div class="row-title">Loading Dock</div><div class="row-sub">Placeholder source</div></div><span class="pill gray">Shell</span></div>
+          <div class="list-row"><div><div class="row-title">Rear Yard PTZ</div><div class="row-sub">Placeholder source</div></div><span class="pill gray">Shell</span></div>
+        </div>
+      </aside>
+      <section class="playback-view">
+        <div class="playback-video"><span>PLAYBACK</span></div>
+        <div class="dock-card">
+          <div class="dock-title">Timeline shell</div>
+          <div class="dock-line">Recording playback is not available in this unit.</div>
+          <div class="timeline"><div class="rec" style="left:2%;width:36%"></div><div class="motion" style="left:44%;width:9%"></div><div class="rec" style="left:58%;width:34%"></div><div class="marker" style="left:47%"></div></div>
+          <div class="control-row"><button class="btn" type="button">◀ 10s</button><button class="btn btn-primary" type="button">▶ Play</button><button class="btn" type="button">Pause</button><button class="btn" type="button">1x</button><button class="btn" type="button">Snapshot</button></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <main class="page" id="cameras">
+    <div class="page-grid">
+      <aside class="panel">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Cameras</div>
+            <div class="section-sub" id="camera-count">Saved records</div>
+          </div>
+          <button class="btn btn-primary" type="button" onclick="openModal()">+ Add Camera</button>
+        </div>
+        <div class="panel-body" id="camera-list" aria-live="polite"></div>
+      </aside>
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <div class="section-title">ONVIF stubs</div>
+            <div class="section-sub">Discover and test do not contact devices</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="setup-grid">
+            <div class="card">
+              <div class="card-title">Discover</div>
+              <div class="card-sub">Returns an empty device list. Nothing is added automatically.</div>
+              <div class="control-row"><button class="btn btn-primary" type="button" id="discover-btn">Run discover stub</button></div>
+              <div class="card-sub" id="discover-result" aria-live="polite"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Test</div>
+              <div class="card-sub">Network, ONVIF, streams, PTZ, audio, and events stay not run. Unsupported is not a failure in the locked flow; this unit does not run the checks.</div>
+              <div class="control-row"><button class="btn" type="button" id="test-btn">Run test stub</button></div>
+              <div class="card-sub" id="test-result" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <main class="page" id="storage">
+    <div class="storage-grid">
+      <section class="panel">
+        <div class="section-head"><div><div class="section-title">Storage</div><div class="section-sub">Shell only</div></div></div>
+        <div class="panel-body">
+          <div class="card">
+            <div class="card-title">Retention</div>
+            <div class="card-sub">Recording and retention are not implemented in this unit.</div>
+            <div class="storage-bar"><div class="storage-fill"></div></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><div class="section-title">Usage</div><div class="section-sub">No recorder attached</div></div></div>
+        <div class="panel-body">
+          <div class="card">
+            <div class="card-title">Placeholder</div>
+            <div class="card-sub">The bar is visual chrome from the baseline shell. It is not a disk measurement.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <main class="page" id="settings">
+    <div class="settings-grid">
+      <section class="panel">
+        <div class="section-head"><div><div class="section-title">Settings</div><div class="section-sub">Shell only</div></div></div>
+        <div class="panel-body">
+          <div class="card">
+            <div class="card-title">Appearance</div>
+            <div class="card-sub">Near-black surfaces, green for healthy state, blue accent. Theme controls are not wired in this unit.</div>
+          </div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="section-head"><div><div class="section-title">System</div><div class="section-sub">Local shell</div></div></div>
+        <div class="panel-body">
+          <div class="card">
+            <div class="card-title">API</div>
+            <div class="card-sub" id="settings-api">Camera list loads from this same origin.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</section>
+</div>
+
+<div class="modal-backdrop" id="addCameraModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="add-camera-title">
+    <div class="section-head">
+      <div>
+        <div class="section-title" id="add-camera-title">Add Camera</div>
+        <div class="section-sub">Name, site, and group. Device login is not part of this unit.</div>
+      </div>
+    </div>
+    <form id="add-camera-form">
+      <div class="panel-body">
+        <div class="field">
+          <label for="camera-name">Camera name</label>
+          <input id="camera-name" name="name" maxlength="120" autocomplete="off" required />
+        </div>
+        <div class="field">
+          <label for="camera-site">Site</label>
+          <input id="camera-site" name="site" maxlength="120" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="camera-group">Group</label>
+          <input id="camera-group" name="group" maxlength="120" autocomplete="off" />
+        </div>
+        <p class="card-sub" id="add-camera-error" role="status"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save Camera</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const navBtns = document.querySelectorAll('.nav-btn');
+  const pages = document.querySelectorAll('.page');
+  const modal = document.getElementById('addCameraModal');
+  const cameraList = document.getElementById('camera-list');
+  const cameraCount = document.getElementById('camera-count');
+  const addForm = document.getElementById('add-camera-form');
+  const addError = document.getElementById('add-camera-error');
+
+  function showPage(pageId) {
+    navBtns.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.page === pageId);
+    });
+    pages.forEach((page) => {
+      page.classList.toggle('active', page.id === pageId);
+    });
+    if (pageId === 'cameras') loadCameras();
+  }
+
+  navBtns.forEach((btn) => {
+    btn.addEventListener('click', () => showPage(btn.dataset.page));
+  });
+
+  function openModal() {
+    addError.textContent = '';
+    modal.classList.add('open');
+    document.getElementById('camera-name').focus();
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    addForm.reset();
+    addError.textContent = '';
+  }
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) closeModal();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+
+  function renderCameras(cameras) {
+    cameraList.replaceChildren();
+    cameraCount.textContent = cameras.length ? cameras.length + ' saved' : 'No cameras saved';
+    if (!cameras.length) {
+      const row = document.createElement('div');
+      row.className = 'list-row';
+      const text = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'row-title';
+      title.textContent = 'No cameras saved';
+      const sub = document.createElement('div');
+      sub.className = 'row-sub';
+      sub.textContent = 'Add a name, site, and group. Discovery does not add devices.';
+      text.append(title, sub);
+      row.append(text);
+      cameraList.append(row);
+      return;
+    }
+    cameras.forEach((camera) => {
+      const row = document.createElement('div');
+      row.className = 'list-row';
+      const text = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'row-title';
+      title.textContent = camera.name || 'Camera';
+      const sub = document.createElement('div');
+      sub.className = 'row-sub';
+      sub.textContent = [camera.site, camera.group].filter(Boolean).join(' · ') || 'No site';
+      text.append(title, sub);
+      const pill = document.createElement('span');
+      pill.className = 'pill gray';
+      pill.textContent = camera.status || 'unknown';
+      row.append(text, pill);
+      cameraList.append(row);
+    });
+  }
+
+  async function loadCameras() {
+    try {
+      const response = await fetch('/api/cameras');
+      if (!response.ok) throw new Error('unavailable');
+      const data = await response.json();
+      renderCameras(Array.isArray(data) ? data.map(publicCamera) : []);
+    } catch {
+      cameraCount.textContent = 'Camera list unavailable';
+      cameraList.replaceChildren();
+      const row = document.createElement('div');
+      row.className = 'list-row';
+      const title = document.createElement('div');
+      title.className = 'row-title';
+      title.textContent = 'API unavailable';
+      const sub = document.createElement('div');
+      sub.className = 'row-sub';
+      sub.textContent = 'Start the VMS process and open this page from it.';
+      const text = document.createElement('div');
+      text.append(title, sub);
+      row.append(text);
+      cameraList.append(row);
+    }
+  }
+
+  function publicCamera(camera) {
+    return {
+      name: typeof camera.name === 'string' ? camera.name : '',
+      site: typeof camera.site === 'string' ? camera.site : '',
+      group: typeof camera.group === 'string' ? camera.group : '',
+      status: typeof camera.status === 'string' ? camera.status : 'unknown'
+    };
+  }
+
+  addForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    addError.textContent = '';
+    const payload = {
+      name: document.getElementById('camera-name').value.trim(),
+      site: document.getElementById('camera-site').value.trim(),
+      group: document.getElementById('camera-group').value.trim()
+    };
+    if (!payload.name) {
+      addError.textContent = 'Enter a camera name.';
+      return;
+    }
+    try {
+      const response = await fetch('/api/cameras', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error('save failed');
+      closeModal();
+      showPage('cameras');
+    } catch {
+      addError.textContent = 'Camera could not be saved.';
+    }
+  });
+
+  async function runStub(path, target, summary) {
+    target.textContent = 'Contacting stub…';
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}'
+      });
+      if (!response.ok) throw new Error('stub failed');
+      const data = await response.json();
+      target.textContent = summary(data);
+    } catch {
+      target.textContent = 'Stub unavailable.';
+    }
+  }
+
+  document.getElementById('discover-btn').addEventListener('click', () => {
+    runStub('/api/onvif/discover', document.getElementById('discover-result'), (data) => {
+      const count = Array.isArray(data.devices) ? data.devices.length : 0;
+      return count + ' devices · discovery is not implemented';
+    });
+  });
+
+  document.getElementById('test-btn').addEventListener('click', () => {
+    runStub('/api/onvif/test', document.getElementById('test-result'), (data) => {
+      const checks = Array.isArray(data.checks) ? data.checks.length : 0;
+      return checks + ' checks not run';
+    });
+  });
+
+  loadCameras();
+</script>
+</body>
+</html>
